@@ -73,6 +73,7 @@ export default function WhatsAppPage() {
     if (!newSessionId) return;
     try {
       await fetch(`${apiUrl}/sessions/create`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: newSessionId.toLowerCase().replace(/\s+/g, '_') })
       });
