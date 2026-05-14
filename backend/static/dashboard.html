@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChalLeads AI Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 25px;
+        }
+        
+        button, .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102,126,234,0.4);
+        }
+        
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+        
+        .filters {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        
+        select, input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .leads-table {
+            background: white;
+            border-radius: 15px;
+            overflow-x: auto;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .score-badge {
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .score-Hot {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+        
+        .score-Warm {
+            background: #fed7aa;
+            color: #ea580c;
+        }
+        
+        .score-Cold {
+            background: #e0e7ff;
+            color: #4f46e5;
+        }
+        
+        .delete-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .delete-btn:hover {
+            background: #dc2626;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        .modal-header {
+            font-size: 1.5em;
+            margin-bottom: 15px;
+        }
+        
+        .session-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 15px 0;
+        }
+        
+        .session-item {
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .session-item.selected {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            th, td {
+                padding: 10px;
+                font-size: 12px;
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 ChalLeads AI Dashboard</h1>
+            <p class="subtitle">Real-time lead generation from WhatsApp sessions</p>
+            
+            <div class="stats" id="stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalLeads">0</div>
+                    <div class="stat-label">Total Leads</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="hotLeads">0</div>
+                    <div class="stat-label">Hot Leads</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="warmLeads">0</div>
+                    <div class="stat-label">Warm Leads</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="coldLeads">0</div>
+                    <div class="stat-label">Cold Leads</div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button class="btn-primary" onclick="refreshLeads()">🔄 Refresh</button>
+                <button class="btn-primary" onclick="openExportModal()">📊 Export to Excel</button>
+                <button class="btn-danger" onclick="deleteAllLeads()">🗑️ Delete All</button>
+            </div>
+            
+            <div class="filters">
+                <select id="scoreFilter" onchange="refreshLeads()">
+                    <option value="">All Scores</option>
+                    <option value="Hot">Hot</option>
+                    <option value="Warm">Warm</option>
+                    <option value="Cold">Cold</option>
+                </select>
+                <input type="text" id="searchQuery" placeholder="Search by name, email, or mobile..." onkeyup="refreshLeads()">
+            </div>
+        </div>
+        
+        <div class="leads-table">
+            <table id="leadsTable">
+                <thead>
+                    <tr>
+                        <th>Session</th>
+                        <th>Name</th>
+                        <th>Mobile</th>
+                        <th>Email</th>
+                        <th>Score</th>
+                        <th>Confidence</th>
+                        <th>Source</th>
+                        <th>Created At</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="leadsBody">
+                    <tr>
+                        <td colspan="9" class="loading">
+                            <div class="spinner"></div>
+                            Loading leads...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Export Modal -->
+    <div id="exportModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">📊 Export Leads to Excel</div>
+            <p>Select WhatsApp sessions to export:</p>
+            <div class="session-list" id="sessionList">
+                <div class="loading">Loading sessions...</div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeExportModal()">Cancel</button>
+                <button class="btn-primary" onclick="exportSelectedSessions()">Export</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let selectedSessions = new Set();
+        
+        function connectWebSocket() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                console.log('WebSocket connected');
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.event === 'lead_updated') {
+                    console.log('New lead received:', data.data);
+                    refreshLeads();
+                }
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = function() {
+                console.log('WebSocket disconnected, reconnecting in 3 seconds...');
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+        
+        async function refreshLeads() {
+            const scoreFilter = document.getElementById('scoreFilter').value;
+            const searchQuery = document.getElementById('searchQuery').value;
+            
+            let url = '/contacts/';
+            const params = [];
+            if (scoreFilter) params.push(`score=${scoreFilter}`);
+            if (searchQuery) params.push(`query=${encodeURIComponent(searchQuery)}`);
+            if (params.length) url += '?' + params.join('&');
+            
+            try {
+                const response = await fetch(url);
+                const leads = await response.json();
+                displayLeads(leads);
+                updateStats(leads);
+            } catch (error) {
+                console.error('Error fetching leads:', error);
+            }
+        }
+        
+        function displayLeads(leads) {
+            const tbody = document.getElementById('leadsBody');
+            
+            if (!leads || leads.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center;">No leads found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = leads.map(lead => `
+                <tr>
+                    <td>${escapeHtml(lead.session_id?.substring(0, 20) || '-')}</td>
+                    <td><strong>${escapeHtml(lead.extracted_name !== 'absent' ? lead.extracted_name : '-')}</strong></td>
+                    <td>${escapeHtml(lead.mobile !== 'absent' ? lead.mobile : '-')}</td>
+                    <td>${escapeHtml(lead.email !== 'absent' ? lead.email : '-')}</td>
+                    <td><span class="score-badge score-${lead.lead_score}">${lead.lead_score}</span></td>
+                    <td>${(lead.confidence * 100).toFixed(0)}%</td>
+                    <td>${lead.source_type || 'text'}</td>
+                    <td>${new Date(lead.created_at).toLocaleString()}</td>
+                    <td><button class="delete-btn" onclick="deleteLead(${lead.id})">Delete</button></td>
+                </tr>
+            `).join('');
+        }
+        
+        function updateStats(leads) {
+            const total = leads.length;
+            const hot = leads.filter(l => l.lead_score === 'Hot').length;
+            const warm = leads.filter(l => l.lead_score === 'Warm').length;
+            const cold = leads.filter(l => l.lead_score === 'Cold').length;
+            
+            document.getElementById('totalLeads').textContent = total;
+            document.getElementById('hotLeads').textContent = hot;
+            document.getElementById('warmLeads').textContent = warm;
+            document.getElementById('coldLeads').textContent = cold;
+        }
+        
+        async function deleteLead(id) {
+            if (!confirm('Are you sure you want to delete this lead?')) return;
+            
+            try {
+                const response = await fetch(`/contacts/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    refreshLeads();
+                } else {
+                    alert('Failed to delete lead');
+                }
+            } catch (error) {
+                console.error('Error deleting lead:', error);
+                alert('Error deleting lead');
+            }
+        }
+        
+        async function deleteAllLeads() {
+            if (!confirm('⚠️ WARNING: This will delete ALL leads. Are you absolutely sure?')) return;
+            
+            try {
+                const response = await fetch('/contacts/all', { method: 'DELETE' });
+                if (response.ok) {
+                    refreshLeads();
+                } else {
+                    alert('Failed to delete leads');
+                }
+            } catch (error) {
+                console.error('Error deleting leads:', error);
+                alert('Error deleting leads');
+            }
+        }
+        
+        async function openExportModal() {
+            const modal = document.getElementById('exportModal');
+            const sessionList = document.getElementById('sessionList');
+            
+            modal.style.display = 'flex';
+            selectedSessions.clear();
+            
+            // Fetch sessions
+            try {
+                const response = await fetch('/contacts/sessions');
+                const sessions = await response.json();
+                
+                if (sessions.length === 0) {
+                    sessionList.innerHTML = '<div style="padding: 20px; text-align: center;">No sessions found</div>';
+                } else {
+                    sessionList.innerHTML = sessions.map(session => `
+                        <div class="session-item" onclick="toggleSession('${session.session_id}')" data-session="${session.session_id}">
+                            <strong>${escapeHtml(session.session_id)}</strong><br>
+                            Status: ${session.status} | Leads: ${session.lead_count}
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error fetching sessions:', error);
+                sessionList.innerHTML = '<div style="padding: 20px; text-align: center; color: red;">Error loading sessions</div>';
+            }
+        }
+        
+        function toggleSession(sessionId) {
+            const element = document.querySelector(`[data-session="${sessionId}"]`);
+            if (selectedSessions.has(sessionId)) {
+                selectedSessions.delete(sessionId);
+                element.classList.remove('selected');
+            } else {
+                selectedSessions.add(sessionId);
+                element.classList.add('selected');
+            }
+        }
+        
+        async function exportSelectedSessions() {
+            if (selectedSessions.size === 0) {
+                alert('Please select at least one session to export');
+                return;
+            }
+            
+            const sessionIds = Array.from(selectedSessions);
+            const params = sessionIds.map(id => `session_ids=${encodeURIComponent(id)}`).join('&');
+            
+            window.location.href = `/contacts/export?${params}`;
+            closeExportModal();
+        }
+        
+        function closeExportModal() {
+            document.getElementById('exportModal').style.display = 'none';
+            selectedSessions.clear();
+        }
+        
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Initialize
+        connectWebSocket();
+        refreshLeads();
+        
+        // Auto-refresh every 10 seconds
+        setInterval(refreshLeads, 10000);
+    </script>
+</body>
+</html>
