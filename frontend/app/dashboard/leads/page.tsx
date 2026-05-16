@@ -45,6 +45,10 @@ export default function LeadsPage() {
   const [filterScore, setFilterScore] = useState('');
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [availableSessions, setAvailableSessions] = useState<{session_id: string, lead_count: number}[]>([]);
+  const [selectedExportSessions, setSelectedExportSessions] = useState<string[]>([]);
+  
   const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const apiUrl = rawApiUrl.replace(/\/$/, "");
   
@@ -72,13 +76,35 @@ export default function LeadsPage() {
     }
   };
 
+  const fetchSessions = async () => {
+    try {
+      const response = await fetch(`${apiUrl}/contacts/sessions`);
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableSessions(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch sessions', e);
+    }
+  };
+
+  const openExportModal = () => {
+    fetchSessions();
+    setSelectedExportSessions(filterSession ? [filterSession] : []);
+    setShowExportModal(true);
+  };
+
   const handleExport = () => {
     const params = new URLSearchParams();
     if (searchTerm) params.append('query', searchTerm);
-    if (filterSession) params.append('session_id', filterSession);
     if (filterScore) params.append('score', filterScore);
+    
+    selectedExportSessions.forEach(session => {
+      params.append('session_ids', session);
+    });
 
     window.location.href = `${apiUrl}/contacts/export?${params.toString()}`;
+    setShowExportModal(false);
   };
 
   const confirmDelete = async () => {
@@ -172,6 +198,62 @@ export default function LeadsPage() {
         </div>
       )}
 
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-md animate-fade-in">
+           <div className="bg-white rounded-[3rem] p-12 max-w-lg w-full shadow-2xl border border-slate-100 animate-scale-up">
+              <div className="w-20 h-20 bg-indigo-50 rounded-[2rem] flex items-center justify-center text-indigo-600 mx-auto mb-8">
+                 <Download size={40} />
+              </div>
+              <h3 className="text-3xl font-black text-center text-slate-900">Export Intelligence</h3>
+              <p className="text-slate-400 font-medium text-center mt-4 mb-8 leading-relaxed">
+                Select the sessions you wish to export. Active filters (Search & Score) will also be applied to the final spreadsheet.
+              </p>
+              
+              <div className="max-h-60 overflow-y-auto space-y-3 mb-8 pr-2">
+                {availableSessions.length === 0 && (
+                  <p className="text-center text-slate-400 italic font-bold">No sessions available.</p>
+                )}
+                {availableSessions.map(session => (
+                  <label key={session.session_id} className="flex items-center gap-4 p-4 border border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-50 transition-colors">
+                    <input 
+                      type="checkbox" 
+                      className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      checked={selectedExportSessions.includes(session.session_id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedExportSessions([...selectedExportSessions, session.session_id]);
+                        } else {
+                          setSelectedExportSessions(selectedExportSessions.filter(id => id !== session.session_id));
+                        }
+                      }}
+                    />
+                    <div className="flex-1">
+                      <p className="font-black text-slate-900 capitalize">{session.session_id.replace('_', ' ')}</p>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{session.lead_count} Leads</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="flex gap-4">
+                 <button 
+                   onClick={() => setShowExportModal(false)}
+                   className="flex-1 py-5 bg-slate-50 text-slate-400 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   onClick={handleExport}
+                   className="flex-1 py-5 bg-indigo-600 text-white rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all"
+                 >
+                   Download XLSX
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
         <div>
            <div className="flex items-center gap-3 mb-4">
@@ -195,7 +277,7 @@ export default function LeadsPage() {
              Wipe All
            </button>
            <button 
-             onClick={handleExport}
+             onClick={openExportModal}
              className="px-10 py-5 bg-indigo-600 text-white rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center gap-3 group"
            >
              <Download size={18} className="group-hover:-translate-y-1 transition-transform" />

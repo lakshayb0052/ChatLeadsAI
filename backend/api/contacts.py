@@ -51,7 +51,7 @@ def get_sessions(db: Session = Depends(get_session)):
 
 @router.get("/export")
 async def export_contacts(
-    session_id: Optional[str] = None,
+    session_ids: List[str] = Query(None),
     score: Optional[str] = None,
     query: Optional[str] = None,
     db: Session = Depends(get_session)
@@ -63,12 +63,12 @@ async def export_contacts(
     import io
     from fastapi.responses import StreamingResponse
     
-    print(f"📊 Exporting leads with filters: session={session_id}, score={score}, query={query}")
+    print(f"📊 Exporting leads with filters: sessions={session_ids}, score={score}, query={query}")
     
     statement = select(Contact).order_by(Contact.created_at.desc())
     
-    if session_id:
-        statement = statement.where(Contact.session_id == session_id)
+    if session_ids:
+        statement = statement.where(Contact.session_id.in_(session_ids))
     if score:
         statement = statement.where(Contact.lead_score == score)
     if query:
