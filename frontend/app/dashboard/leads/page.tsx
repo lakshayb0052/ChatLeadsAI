@@ -385,12 +385,14 @@ function LeadCard({ lead, onDelete }: { lead: Lead; onDelete: () => void }) {
             <h3 className="text-3xl font-black text-slate-900 tracking-tighter group-hover:text-indigo-600 transition-colors">
               {lead.extracted_name || 'Anonymous Lead'}
             </h3>
-            <div className="flex items-center gap-2 mt-1">
-              <Building2 size={16} className="text-slate-300" />
-              <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">
-                {lead.company || 'Private Entity'}
-              </p>
-            </div>
+            {lead.company && (
+              <div className="flex items-center gap-2 mt-1">
+                <Building2 size={16} className="text-slate-300" />
+                <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">
+                  {lead.company}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -435,10 +437,6 @@ function LeadCard({ lead, onDelete }: { lead: Lead; onDelete: () => void }) {
                 className="w-16 h-16 bg-white border border-slate-100 text-slate-300 rounded-[1.5rem] flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 hover:border-rose-100 transition-all shadow-sm active:scale-90"
               >
                  <Trash2 size={24} />
-              </button>
-              <button className="w-16 h-16 bg-indigo-600 text-white rounded-[1.5rem] flex items-center justify-center shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95 group/btn relative overflow-hidden">
-                 <MessageCircle size={28} className="relative z-10" />
-                 <div className="absolute inset-0 bg-white/10 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
               </button>
            </div>
         </div>
