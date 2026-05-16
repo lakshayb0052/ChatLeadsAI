@@ -16,7 +16,7 @@ ChatLeads AI is a powerful, automated lead intelligence platform that extracts l
 - **Frontend**: Next.js 15, TypeScript, Tailwind CSS, Lucide Icons.
 - **Backend**: FastAPI, Python, SQLModel (PostgreSQL/SQLite).
 - **Automation**: Custom WhatsApp session management.
-- **AI**: Integration with OpenAI and Anthropic for intelligent parsing.
+- **AI**: Integration with Gemini Vision API for intelligent document parsing and data extraction.
 
 ## 🚀 Quick Start
 

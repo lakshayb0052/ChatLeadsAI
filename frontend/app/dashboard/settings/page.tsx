@@ -53,9 +53,8 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-6">
-               <div className="grid grid-cols-2 gap-4">
-                  <ProviderCard name="Ollama (Local)" selected={true} desc="Llama 3 • Free • Secure" />
-                  <ProviderCard name="OpenAI (Cloud)" selected={false} desc="GPT-4o • Pay-per-use" />
+               <div className="grid grid-cols-1 gap-4">
+                  <ProviderCard name="Gemini Vision (Cloud)" selected={true} desc="Gemini 2.5 Flash • Multi-modal" />
                </div>
 
                <div className="space-y-2">

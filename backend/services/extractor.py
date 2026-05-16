@@ -4,20 +4,14 @@ import base64
 import io
 import re
 from typing import Optional, Dict, List
-from openai import OpenAI
 from dotenv import load_dotenv
 import ollama
-import pytesseract
 from PIL import Image, ImageEnhance, ImageFilter
 from google import genai
 
 load_dotenv()
 
-# Configure Tesseract path for Windows
-if os.name == 'nt':
-    tesseract_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-    if os.path.exists(tesseract_path):
-        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+# Configuration removed since we use Gemini Vision directly
 
 def get_system_prompt(text_content: str, context: Optional[str] = None) -> str:
     context_str = f"\nRECENT CONTEXT (Previous messages from this contact):\n{context}" if context else ""
@@ -61,16 +55,9 @@ def get_system_prompt(text_content: str, context: Optional[str] = None) -> str:
 
 class ExtractorService:
     def __init__(self):
-        self.provider = os.getenv("AI_PROVIDER", "ollama").lower()
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        self.provider = os.getenv("AI_PROVIDER", "gemini").lower()
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
         self.client = None
-        
-        if self.openai_api_key:
-            try:
-                self.client = OpenAI(api_key=self.openai_api_key)
-            except Exception as e:
-                print(f"Failed to initialize OpenAI client: {e}")
                 
         if self.gemini_api_key:
             try:
@@ -101,63 +88,8 @@ class ExtractorService:
         context_str = "\n".join(context_messages) if context_messages else None
         
         if image_bytes:
-            print("🔍 Processing image for OCR...")
-            try:
-                # Enhanced image preprocessing
-                image = Image.open(io.BytesIO(image_bytes))
-                
-                # Convert to RGB if needed
-                if image.mode != 'RGB':
-                    image = image.convert('RGB')
-                
-                # Multiple preprocessing steps for better OCR
-                # 1. Convert to grayscale
-                gray = image.convert('L')
-                
-                # 2. Enhance contrast
-                enhancer = ImageEnhance.Contrast(gray)
-                enhanced = enhancer.enhance(2.0)
-                
-                # 3. Apply sharpening filter
-                sharpened = enhanced.filter(ImageFilter.SHARPEN)
-                
-                # 4. Increase resolution if too small
-                if sharpened.size[0] < 1000:
-                    new_size = (sharpened.size[0] * 2, sharpened.size[1] * 2)
-                    sharpened = sharpened.resize(new_size, Image.Resampling.LANCZOS)
-                
-                # Try OCR with different configurations
-                ocr_texts = []
-                
-                # Configuration 1: Standard
-                config1 = '--psm 6 --oem 3'
-                text1 = pytesseract.image_to_string(sharpened, config=config1)
-                if text1.strip():
-                    ocr_texts.append(text1)
-                
-                # Configuration 2: Treat image as a single text block
-                config2 = '--psm 7 --oem 3'
-                text2 = pytesseract.image_to_string(sharpened, config=config2)
-                if text2.strip():
-                    ocr_texts.append(text2)
-                
-                # Configuration 3: Sparse text
-                config3 = '--psm 11 --oem 3'
-                text3 = pytesseract.image_to_string(sharpened, config=config3)
-                if text3.strip():
-                    ocr_texts.append(text3)
-                
-                # Combine all OCR results with highest confidence
-                ocr_text = "\n".join(ocr_texts)
-                
-                if ocr_text.strip():
-                    print(f"✅ OCR Success: Extracted {len(ocr_text)} characters.")
-                    print(f"--- OCR CONTENT START ---\n{ocr_text}\n--- OCR CONTENT END ---")
-                    combined_text += f"\n[IMAGE OCR CONTENT]:\n{ocr_text}"
-                else:
-                    print("⚠️ OCR returned no text.")
-            except Exception as e:
-                print(f"❌ OCR Error: {e}")
+            print("🔍 Image detected, routing to Gemini Vision...")
+            # We skip local OCR (Tesseract) because Gemini 2.5 Flash has native, state-of-the-art vision and OCR capabilities built-in.
 
         if not combined_text.strip() and not context_str and not image_bytes:
             print("ℹ️ Skipping extraction: No content, no context, and no image.")
@@ -166,9 +98,7 @@ class ExtractorService:
         # Try Primary Provider
         result = None
         print(f"🤖 Calling AI Provider: {self.provider}...")
-        if self.provider == "openai":
-            result = await self._extract_openai(combined_text, context_str, image_bytes)
-        elif self.provider == "gemini":
+        if self.provider == "gemini":
             result = await self._extract_gemini(combined_text, context_str, image_bytes)
         else:
             result = await self._extract_ollama(combined_text, context_str)
@@ -177,11 +107,6 @@ class ExtractorService:
         if not result and self.gemini_api_key:
             print("🔄 Falling back to Gemini Vision (Free Tier)...")
             result = await self._extract_gemini(combined_text, context_str, image_bytes)
-
-        # Fallback 2: OpenAI
-        if not result and self.openai_api_key:
-            print("🔄 Falling back to OpenAI Vision...")
-            result = await self._extract_openai(combined_text, context_str, image_bytes)
 
         # Final Fallback: Regex Survival Mode
         if not result:
@@ -332,38 +257,7 @@ class ExtractorService:
             print(f"Ollama Error: {e}")
             return None
 
-    async def _extract_openai(self, text: str, context: Optional[str] = None, image_bytes: Optional[bytes] = None) -> Dict:
-        try:
-            prompt = get_system_prompt(text, context)
-            
-            messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
-            
-            if image_bytes:
-                base64_image = base64.b64encode(image_bytes).decode('utf-8')
-                messages[0]["content"].append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
-                })
-                print("🖼️ OpenAI Vision: Sending image for direct analysis...")
 
-            if not self.client:
-                # Late initialization if needed
-                if self.openai_api_key:
-                    self.client = OpenAI(api_key=self.openai_api_key)
-                else:
-                    raise Exception("OpenAI API Key missing")
-
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",  # Using mini for faster response
-                messages=messages,
-                response_format={"type": "json_object"},
-                temperature=0.1,
-                max_tokens=300
-            )
-            return self._parse_ai_json(response.choices[0].message.content)
-        except Exception as e:
-            print(f"OpenAI Error: {e}")
-            return None
 
     async def _extract_gemini(self, text: str, context: Optional[str] = None, image_bytes: Optional[bytes] = None) -> Dict:
         try:

@@ -5,13 +5,10 @@ psycopg2-binary
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
-openai
-anthropic
 python-dotenv
 httpx
 pydantic-settings
 ollama
-pytesseract
 pillow
 pandas
 openpyxl
