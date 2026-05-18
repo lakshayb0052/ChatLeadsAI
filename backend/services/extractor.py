@@ -141,61 +141,72 @@ class ExtractorService:
         return None
 
     async def extract_lead_data(self, text_content: Optional[str] = None, image_bytes: Optional[bytes] = None, sender_name: Optional[str] = None, context_messages: Optional[List[str]] = None) -> Dict:
-        combined_text = text_content or ""
-        context_str = "\n".join(context_messages) if context_messages else None
-        
-        if image_bytes:
-            print("🔍 Image detected, routing to Gemini Vision...")
-            # We skip local OCR (Tesseract) because Gemini 2.5 Flash has native, state-of-the-art vision and OCR capabilities built-in.
-
-        if not combined_text.strip() and not context_str and not image_bytes:
-            print("ℹ️ Skipping extraction: No content, no context, and no image.")
-            return None
-
-        # Try Primary Provider
-        result = None
-        print(f"🤖 Calling AI Provider: {self.provider}...")
-        if self.provider == "gemini":
-            result = await self._extract_gemini(combined_text, context_str, image_bytes)
-        else:
-            result = await self._extract_ollama(combined_text, context_str)
-
-        # Fallback 1: Gemini (Free) - Only if not already tried as primary provider
-        if not result and self.provider != "gemini" and self.gemini_api_key:
-            print("🔄 Falling back to Gemini Vision (Free Tier)...")
-            result = await self._extract_gemini(combined_text, context_str, image_bytes)
-
-        # Final Fallback: Regex Survival Mode
-        if not result:
-            print("⚠️ All AI providers failed or returned invalid data. Using Regex Survival Mode...")
-            full_text_for_regex = f"{context_str}\n{combined_text}" if context_str else combined_text
-            result = self._regex_fallback(full_text_for_regex, sender_name)
-
-        # Ensure all required fields are present
-        if result:
-            # Mark absent fields
-            result['name'] = result.get('name', 'absent')
-            result['mobile'] = result.get('mobile', 'absent')
-            result['email'] = result.get('email', 'absent')
+        try:
+            combined_text = text_content or ""
+            context_str = "\n".join(context_messages) if context_messages else None
             
-            # Validate and clean mobile number
-            if result['mobile'] != 'absent':
-                # Clean to only digits
-                clean_mobile = re.sub(r'\D', '', str(result['mobile']))
-                # Take last 10 digits
-                if len(clean_mobile) >= 10:
-                    result['mobile'] = clean_mobile[-10:]
+            if image_bytes:
+                print("🔍 Image detected, routing to Gemini Vision...")
+
+            if not combined_text.strip() and not context_str and not image_bytes:
+                print("ℹ️ Skipping extraction: No content, no context, and no image.")
+                return None
+
+            # Try Primary Provider
+            result = None
+            print(f"🤖 Calling AI Provider: {self.provider}...")
+            try:
+                if self.provider == "gemini":
+                    result = await self._extract_gemini(combined_text, context_str, image_bytes)
                 else:
-                    result['mobile'] = 'absent'
-            
-            # Validate email
-            if result['email'] != 'absent':
-                email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-                if not re.match(email_pattern, result['email']):
-                    result['email'] = 'absent'
-            
-            print(f"✅ Extraction Complete: Name={result.get('name')}, Mobile={result.get('mobile')}, Email={result.get('email')}, Confidence={result.get('confidence')}")
-        return result
+                    result = await self._extract_ollama(combined_text, context_str)
+            except Exception as e:
+                print(f"⚠️ Primary provider failed: {e}")
+
+            # Fallback 1: Gemini (Free) - Only if not already tried as primary provider
+            if not result and self.provider != "gemini" and self.gemini_api_key:
+                print("🔄 Falling back to Gemini Vision (Free Tier)...")
+                try:
+                    result = await self._extract_gemini(combined_text, context_str, image_bytes)
+                except Exception as e:
+                    print(f"⚠️ Fallback provider failed: {e}")
+
+            # Final Fallback: Regex Survival Mode
+            if not result:
+                print("⚠️ All AI providers failed or returned invalid data. Using Regex Survival Mode...")
+                full_text_for_regex = f"{context_str}\n{combined_text}" if context_str else combined_text
+                result = self._regex_fallback(full_text_for_regex, sender_name)
+
+            # Ensure all required fields are present
+            if result:
+                result['name'] = result.get('name', 'absent')
+                result['mobile'] = result.get('mobile', 'absent')
+                result['email'] = result.get('email', 'absent')
+                
+                # Validate and clean mobile number
+                if result['mobile'] != 'absent':
+                    clean_mobile = re.sub(r'\D', '', str(result['mobile']))
+                    if len(clean_mobile) >= 10:
+                        result['mobile'] = clean_mobile[-10:]
+                    else:
+                        result['mobile'] = 'absent'
+                
+                # Validate email
+                if result['email'] != 'absent':
+                    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+                    if not re.match(email_pattern, result['email']):
+                        result['email'] = 'absent'
+                
+                print(f"✅ Extraction Complete: Name={result.get('name')}, Mobile={result.get('mobile')}, Email={result.get('email')}, Confidence={result.get('confidence')}")
+            return result
+        except Exception as e:
+            print(f"❌ Critical Error in extraction pipeline: {e}. Falling back to clean Regex Extraction.")
+            try:
+                full_text_for_regex = f"{context_str}\n{combined_text}" if context_str else combined_text
+                return self._regex_fallback(full_text_for_regex, sender_name)
+            except Exception as inner_e:
+                print(f"❌ Failed to run Regex fallback: {inner_e}")
+                return None
 
     def _regex_fallback(self, text: str, sender_name: Optional[str] = None) -> Dict:
         # Enhanced regex patterns
@@ -259,7 +270,7 @@ class ExtractorService:
         
         if name == "absent":
             # List of common words/phrases that are NOT names (Blacklist)
-            blacklist = ["sleeping", "busy", "working", "driving", "available", "hello", "hi", "hey", "hlo", "dear", "sir", "madam", "the", "this", "that"]
+            blacklist = ["sleeping", "busy", "working", "driving", "available", "hello", "hi", "hey", "hlo", "dear", "sir", "madam", "the", "this", "that", "ok", "okay", "yes", "no", "sure", "thanks", "thank", "good", "fine", "bye", "please", "pls", "well", "cool", "done", "perfect", "yep", "yeah", "incoming", "outgoing", "message"]
             
             # 1. Try to find name with prefix (I am, My name is, etc.)
             for pattern in patterns['name']:
