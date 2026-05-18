@@ -347,6 +347,10 @@ class ExtractorService:
             now = time.time()
             if client_info["cooldown_until"] > now:
                 wait_sec = client_info["cooldown_until"] - now
+                # FAIL FAST: If wait time is too long, fail immediately to prevent task backlog
+                if wait_sec > 3.0:
+                    print(f"⚠️ Cooldown is too long ({wait_sec:.2f}s) for Key #{client_id}. Failing fast to prevent backlog and trigger fallback immediately.")
+                    return None
                 print(f"⏳ Sleeping for {wait_sec:.2f}s because all keys are rate-limited...")
                 await asyncio.sleep(wait_sec)
             
@@ -378,12 +382,21 @@ class ExtractorService:
                 is_429 = "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "rate" in err_msg.lower() or "quota" in err_msg.lower()
                 
                 if is_429:
-                    # Place key on 60-second cooldown
-                    cooldown_duration = 60.0
-                    client_info["cooldown_until"] = time.time() + cooldown_duration
-                    print(f"⚠️ Key #{client_id} ({masked_key}) hit rate limits. Cooldown active for {cooldown_duration}s.")
+                    # Detect Daily Free-Tier Quota exhaustion
+                    is_daily_exhausted = "exceeded your current quota" in err_msg.lower() or "free_tier_requests" in err_msg.lower() or "daily" in err_msg.lower()
                     
-                    # If we have other keys that are not on cooldown, retry immediately with key rotation!
+                    if is_daily_exhausted:
+                        cooldown_duration = 3600.0  # 1 hour
+                        client_info["cooldown_until"] = time.time() + cooldown_duration
+                        print(f"⚠️ Key #{client_id} ({masked_key}) hit daily free-tier quota limits. Cooldown active for {cooldown_duration}s. Skipping retries.")
+                        break  # Break retry loop immediately as it won't succeed today!
+                    else:
+                        # Place key on standard 60-second cooldown
+                        cooldown_duration = 60.0
+                        client_info["cooldown_until"] = time.time() + cooldown_duration
+                        print(f"⚠️ Key #{client_id} ({masked_key}) hit rate limits. Cooldown active for {cooldown_duration}s.")
+                    
+                    # If we have other keys that are not on cooldown, rotate and retry immediately!
                     active_keys = [c for c in self.gemini_clients if c["cooldown_until"] <= time.time()]
                     if active_keys:
                         print(f"🔄 Rotating to the next available key immediately (attempt {attempt + 1}/{max_retries + 1})...")
