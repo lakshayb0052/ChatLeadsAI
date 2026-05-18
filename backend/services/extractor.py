@@ -8,7 +8,6 @@ import asyncio
 import random
 from typing import Optional, Dict, List
 from dotenv import load_dotenv
-import ollama
 from PIL import Image, ImageEnhance, ImageFilter
 from google import genai
 import httpx
@@ -174,12 +173,11 @@ class ExtractorService:
             result = None
             print(f"🤖 Calling AI Provider: {self.provider}...")
             try:
-                if self.provider == "gemini":
-                    result = await self._extract_gemini(combined_text, context_str, image_bytes)
-                elif self.provider == "groq":
+                if self.provider == "groq":
                     result = await self._extract_groq(combined_text, context_str, image_bytes)
                 else:
-                    result = await self._extract_ollama(combined_text, context_str)
+                    # Default / Fallback to Gemini
+                    result = await self._extract_gemini(combined_text, context_str, image_bytes)
             except Exception as e:
                 print(f"⚠️ Primary provider failed: {e}")
 
@@ -376,14 +374,6 @@ class ExtractorService:
         }
 
 
-    async def _extract_ollama(self, text: str, context: Optional[str] = None) -> Dict:
-        try:
-            prompt = get_system_prompt(text, context)
-            response = ollama.generate(model='llama3', prompt=prompt, options={'num_predict': 200})
-            return self._parse_ai_json(response['response'])
-        except Exception as e:
-            print(f"Ollama Error: {e}")
-            return None
 
     async def _extract_groq(self, text: str, context: Optional[str] = None, image_bytes: Optional[bytes] = None) -> Dict:
         api_key = self.groq_api_key
@@ -416,7 +406,7 @@ class ExtractorService:
                 print(f"❌ Failed to encode image for Groq: {e}")
 
         payload = {
-            "model": "llama-3.2-11b-vision-preview",
+            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
             "messages": [
                 {
                     "role": "user",
@@ -433,7 +423,7 @@ class ExtractorService:
         
         for attempt in range(max_retries + 1):
             try:
-                print(f"🤖 Groq API: Extracting data using llama-3.2-11b-vision-preview (attempt {attempt + 1}/{max_retries + 1})...")
+                print(f"🤖 Groq API: Extracting data using meta-llama/llama-4-scout-17b-16e-instruct (attempt {attempt + 1}/{max_retries + 1})...")
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.post(
                         "https://api.groq.com/openai/v1/chat/completions",

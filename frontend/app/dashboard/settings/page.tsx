@@ -130,19 +130,16 @@ export default function SettingsPage() {
               <SectionCard icon={<Cpu size={22} />} title="AI Intelligence Engine" subtitle="Configure local or cloud processing">
                 <div className="space-y-3">
                   <ProviderCard
+                    name="Groq LPU (Cloud)" selected={selectedProvider === 'groq'}
+                    desc="Llama 4 Scout • High-speed Extraction"
+                    onClick={() => setSelectedProvider('groq')}
+                  />
+                  <ProviderCard
                     name="Gemini Vision (Cloud)" selected={selectedProvider === 'gemini'}
                     desc="Gemini 2.5 Flash • Multi-modal Vision"
                     onClick={() => setSelectedProvider('gemini')}
                   />
-                  <ProviderCard
-                    name="Ollama (Local)" selected={selectedProvider === 'ollama'}
-                    desc="Local LLM • Zero Data Egress"
-                    onClick={() => setSelectedProvider('ollama')}
-                  />
                 </div>
-                {selectedProvider === 'ollama' && (
-                  <InputField label="Ollama Host URL" defaultValue="http://localhost:11434" />
-                )}
                 <div className="p-5 rounded-2xl flex items-center gap-4"
                   style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)' }}>
                   <div className="w-9 h-9 rounded-xl flex items-center justify-center"
