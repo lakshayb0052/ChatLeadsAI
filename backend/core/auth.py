@@ -16,7 +16,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 1 week
 
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 def verify_password(plain_password, hashed_password):
@@ -36,7 +36,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 def authenticate_user(db: Session, email: str, password: str):
-    user = db.query(User).filter(User.email == email).first()
+    from sqlmodel import select
+    user = db.exec(select(User).where(User.email == email)).first()
     if not user:
         return False
     if not verify_password(password, user.hashed_password):
@@ -61,7 +62,8 @@ def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session 
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
         
-    user = db.query(User).filter(User.email == email).first()
+    from sqlmodel import select
+    user = db.exec(select(User).where(User.email == email)).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user

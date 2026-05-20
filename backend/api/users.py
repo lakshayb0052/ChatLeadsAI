@@ -3,7 +3,7 @@ from sqlmodel import Session, select
 from database import get_session
 from models import User
 from core.auth import get_current_user, get_password_hash
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from typing import List, Optional
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -19,7 +19,7 @@ class UserResponse(BaseModel):
 
 class CompanyUserCreate(BaseModel):
     display_name: str
-    email: EmailStr
+    email: str
     password: str
     company_name: str
     max_sessions: int = 5
