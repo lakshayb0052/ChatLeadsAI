@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -69,8 +69,27 @@ app.include_router(stats.router)
 # Static files
 app.mount("/static", StaticFiles(directory="static", html=True), name="static")
 
-@app.get("/")
-async def root():
+@app.api_route("/health", methods=["GET", "HEAD"])
+async def health_check(response: Response):
+    db_status = "healthy"
+    try:
+        from sqlmodel import text
+        with Session(engine) as session:
+            session.exec(text("SELECT 1"))
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        db_status = "unhealthy"
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    
+    return {
+        "status": "healthy" if db_status == "healthy" else "unhealthy",
+        "database": db_status
+    }
+
+@app.api_route("/", methods=["GET", "HEAD"])
+async def root(request: Request):
+    if request.method == "HEAD":
+        return Response(status_code=status.HTTP_200_OK)
     from fastapi.responses import FileResponse
     return FileResponse("static/dashboard.html")
 
