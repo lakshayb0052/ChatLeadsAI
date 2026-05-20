@@ -156,9 +156,29 @@ export default function WhatsAppPage() {
 
   const apiUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 
+  const [maxSessions, setMaxSessions] = useState(5);
+  const [role, setRole] = useState('user');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setMaxSessions(Number(localStorage.getItem('max_sessions') || '5'));
+      setRole(localStorage.getItem('role') || 'user');
+    }
+  }, []);
+
+  const getHeaders = () => {
+    const token = localStorage.getItem('token');
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+  };
+
   const fetchSessions = async () => {
     try {
-      const res = await fetch(`${apiUrl}/sessions/`);
+      const res = await fetch(`${apiUrl}/sessions/`, {
+        headers: getHeaders()
+      });
       if (!res.ok) throw new Error();
       setSessions(await res.json());
       setError(false); setLoading(false);
@@ -180,20 +200,37 @@ export default function WhatsAppPage() {
 
   const handleCreate = async () => {
     if (!newSessionId.trim()) return;
+    
+    // Client Side Quotas Guard
+    if (role !== 'superadmin' && sessions.length >= maxSessions) {
+      alert(`Limit Reached: Your company is capped at a maximum of ${maxSessions} active WhatsApp sessions.`);
+      return;
+    }
+    
     try {
-      await fetch(`${apiUrl}/sessions/create`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(`${apiUrl}/sessions/create`, {
+        method: 'POST',
+        headers: getHeaders(),
         body: JSON.stringify({ session_id: newSessionId.toLowerCase().replace(/\s+/g, '_') })
       });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || 'Failed to initialize session');
+      }
       setNewSessionId(''); setShowModal(false); fetchSessions();
-    } catch {}
+    } catch (e: any) {
+      alert(e.message || 'Error occurred initializing session.');
+    }
   };
 
   const handleDelete = async (sessionId: string) => {
     if (!confirm(`Permanently delete "${sessionId}"?`)) return;
     setDeletingSessionId(sessionId);
     try {
-      await fetch(`${apiUrl}/sessions/${sessionId}`, { method: 'DELETE' });
+      await fetch(`${apiUrl}/sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      });
       fetchSessions();
     } catch (e) { alert(`Delete failed: ${e instanceof Error ? e.message : 'Unknown error'}`); }
     finally { setDeletingSessionId(null); }
@@ -258,11 +295,33 @@ export default function WhatsAppPage() {
             Manage WhatsApp instances for cross-channel lead capture.
           </p>
         </div>
-        <button onClick={() => setShowModal(true)}
-          className="btn-primary px-8 py-4 rounded-2xl font-black text-sm flex items-center gap-2 group">
-          <Plus size={18} className="group-hover:rotate-90 transition-transform duration-300" />
-          Link New Device
-        </button>
+        
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+          {/* Quota Progress Bar for Regular Corporate Users */}
+          {role !== 'superadmin' && (
+            <div className="glass-card rounded-2xl px-5 py-3.5 flex flex-col justify-center min-w-[200px]"
+              style={{ border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)' }}>
+              <div className="flex justify-between items-center mb-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--text-secondary)]">
+                <span>WhatsApp Quota</span>
+                <span className="text-[var(--purple-mid)] font-black">{sessions.length} / {maxSessions}</span>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-[var(--bg-hover)] overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${Math.min(100, (sessions.length / maxSessions) * 100)}%`,
+                    background: sessions.length >= maxSessions ? 'linear-gradient(90deg, #ec4899, #ef4444)' : 'linear-gradient(90deg, #8b5cf6, #7c3aed)'
+                  }} />
+              </div>
+            </div>
+          )}
+          
+          <button onClick={() => setShowModal(true)}
+            disabled={role !== 'superadmin' && sessions.length >= maxSessions}
+            className="btn-primary px-8 py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed">
+            <Plus size={18} className="group-hover:rotate-90 transition-transform duration-300" />
+            Link New Device
+          </button>
+        </div>
       </div>
 
       {/* Sessions Grid */}

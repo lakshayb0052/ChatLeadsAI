@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import routers
-from api import webhooks, contacts, sessions, stats
+from api import webhooks, contacts, sessions, stats, auth, users
 from core.ws import manager
 from models import User
 from database import get_session
@@ -23,13 +23,21 @@ async def lifespan(app: FastAPI):
     logger.info("Creating database tables...")
     SQLModel.metadata.create_all(engine)
     
-    # Seed default user if not exists
+    # Seed default super admin user if not exists
     with Session(engine) as session:
         from sqlmodel import select
-        admin = session.exec(select(User).where(User.id == 1)).first()
+        from core.auth import get_password_hash
+        admin = session.exec(select(User).where(User.email == "admin@chatleads.ai")).first()
         if not admin:
-            logger.info("Seeding default admin user...")
-            admin = User(id=1, email="admin@chatleads.ai", hashed_password="hashed_placeholder")
+            logger.info("Seeding default super admin user...")
+            admin = User(
+                email="admin@chatleads.ai",
+                hashed_password=get_password_hash("Lakshay@123"),
+                display_name="lakshay",
+                role="superadmin",
+                company_name="ChatLeads AI",
+                max_sessions=9999
+            )
             session.add(admin)
             session.commit()
             
@@ -61,6 +69,8 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 # Routes
+app.include_router(auth.router)
+app.include_router(users.router)
 app.include_router(webhooks.router)
 app.include_router(contacts.router)
 app.include_router(sessions.router)

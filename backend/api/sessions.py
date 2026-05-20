@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 from database import get_session, engine
 from models import WhatsAppSession, User
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import httpx
 import datetime
 import os
+from jose import jwt, JWTError
+from core.auth import oauth2_scheme, SECRET_KEY, ALGORITHM
 
 WHATSAPP_SERVICE_URL = os.getenv("WHATSAPP_SERVICE_URL", "http://localhost:8001").rstrip("/")
 
@@ -16,6 +18,25 @@ class QRSync(BaseModel):
     session_id: str
     qr_code: str
     status: Optional[str] = "linking"
+
+def get_current_user_fallback(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_session)) -> User:
+    if not token:
+        # Fallback to seeded superadmin or first user for backwards compatibility
+        user = db.query(User).filter(User.role == "superadmin").first()
+        if not user:
+            user = db.query(User).first()
+        return user
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        if email:
+            user = db.query(User).filter(User.email == email).first()
+            if user:
+                return user
+    except JWTError:
+        pass
+    user = db.query(User).first()
+    return user
 
 @router.post("/update-qr")
 async def update_qr(data: QRSync, db: Session = Depends(get_session)):
@@ -78,10 +99,23 @@ async def update_qr(data: QRSync, db: Session = Depends(get_session)):
         raise HTTPException(status_code=500, detail=f"Database Sync Error: {str(e)}")
 
 @router.post("/create")
-async def create_new_session(data: dict, db: Session = Depends(get_session)):
+async def create_new_session(
+    data: dict,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user_fallback)
+):
     session_id = data.get("session_id")
     if not session_id:
         raise HTTPException(status_code=400, detail="Missing session_id")
+        
+    # Enforce Session Limits Quota (Superadmin is exempt)
+    if current_user.role != "superadmin":
+        active_count = db.query(WhatsAppSession).filter(WhatsAppSession.user_id == current_user.id).count()
+        if active_count >= current_user.max_sessions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Your company's active device limit has been reached ({current_user.max_sessions} max). Please contact the Super Admin."
+            )
     
     # Notify WhatsApp Hub to start new instance
     try:
@@ -90,10 +124,8 @@ async def create_new_session(data: dict, db: Session = Depends(get_session)):
     except Exception as e:
         print(f"Error starting session in Hub: {e}")
 
-    # Create placeholder in DB
-    from models import User
-    admin = db.query(User).first()
-    user_id = admin.id if admin else 1
+    # Map to current authenticated user
+    user_id = current_user.id if current_user else 1
 
     session = db.query(WhatsAppSession).filter(WhatsAppSession.session_id == session_id).first()
     if not session:
@@ -135,8 +167,14 @@ async def get_status(session_id: str, db: Session = Depends(get_session)):
     return {"status": session.status, "qr": session.qr_code}
 
 @router.get("/")
-async def list_sessions(db: Session = Depends(get_session)):
-    sessions = db.query(WhatsAppSession).all()
+async def list_sessions(
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user_fallback)
+):
+    if current_user.role == "superadmin":
+        sessions = db.query(WhatsAppSession).all()
+    else:
+        sessions = db.query(WhatsAppSession).filter(WhatsAppSession.user_id == current_user.id).all()
     return sessions
 
 @router.delete("/{session_id}")

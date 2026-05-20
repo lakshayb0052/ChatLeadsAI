@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -12,9 +12,10 @@ import {
   ChevronRight,
   Activity,
   Menu,
-  X
+  X,
+  Briefcase
 } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 function NavItem({
   icon,
@@ -35,7 +36,7 @@ function NavItem({
       onClick={onClick}
       className={`flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group font-bold text-sm relative overflow-hidden ${
         active
-          ? 'nav-active text-[var(--purple-mid)]'
+          ? 'bg-[var(--bg-hover)] text-[var(--purple-mid)] border-l-[3px] border-[var(--purple-mid)] shadow-sm'
           : 'text-[var(--text-secondary)] hover:text-[var(--purple-mid)] hover:bg-[var(--bg-hover)]'
       }`}
     >
@@ -54,18 +55,50 @@ function NavItem({
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifications] = useState(3);
+  
+  // Auth state
+  const [role, setRole] = useState('user');
+  const [displayName, setDisplayName] = useState('User');
+  const [companyName, setCompanyName] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedRole = localStorage.getItem('role');
+      const storedName = localStorage.getItem('display_name');
+      const storedCompany = localStorage.getItem('company_name');
+      
+      // Fallback redirect if not logged in
+      if (!storedRole) {
+        router.push('/login');
+        return;
+      }
+      
+      setRole(storedRole);
+      setDisplayName(storedName || 'User');
+      setCompanyName(storedCompany || 'Client Company');
+    }
+  }, [router]);
 
   const navItems = [
     { href: '/dashboard', label: 'Overview', icon: <LayoutDashboard size={20} /> },
     { href: '/dashboard/leads', label: 'Leads', icon: <Users size={20} /> },
     { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: <MessageSquare size={20} /> },
+    ...(role === 'superadmin' ? [
+      { href: '/dashboard/users', label: 'Companies', icon: <Briefcase size={20} /> }
+    ] : []),
     { href: '/dashboard/settings', label: 'Settings', icon: <Settings size={20} /> },
   ];
 
+  const handleSignOut = () => {
+    localStorage.clear();
+    router.push('/');
+  };
+
   const SidebarContent = () => (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full animate-fade-in">
       {/* Logo */}
       <div className="flex items-center gap-3 mb-10 px-2">
         <div className="w-12 h-12 rounded-2xl flex items-center justify-center animate-float relative overflow-hidden"
@@ -134,7 +167,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Sign Out */}
       <div className="pt-4 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
-        <button className="flex items-center gap-3 px-5 py-4 text-sm font-bold w-full rounded-2xl transition-all duration-300 group"
+        <button onClick={handleSignOut}
+          className="flex items-center gap-3 px-5 py-4 text-sm font-bold w-full rounded-2xl transition-all duration-300 group"
           style={{ color: 'var(--text-muted)' }}
           onMouseEnter={e => {
             e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.05)';
@@ -152,7 +186,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   return (
-    <div className="flex h-screen overflow-hidden"
+    <div className="flex h-screen overflow-hidden animate-fade-in"
       style={{ background: 'var(--bg-void)' }}>
 
       {/* ── Desktop Sidebar ── */}
@@ -235,12 +269,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             <div className="w-px h-8" style={{ background: 'var(--border-subtle)' }} />
 
-            {/* User */}
+            {/* User details mapped dynamically */}
             <div className="flex items-center gap-3">
               <div className="text-right">
-                <p className="text-sm font-black text-[var(--text-primary)]">Lakshay</p>
+                <p className="text-sm font-black text-[var(--text-primary)] capitalize">{displayName}</p>
                 <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
-                  System Admin
+                  {role === 'superadmin' ? 'System Admin' : companyName}
                 </p>
               </div>
               <div className="w-11 h-11 rounded-2xl relative overflow-hidden"
@@ -249,7 +283,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   border: '2px solid var(--border-glow)',
                   boxShadow: '0 4px 10px rgba(124,58,237,0.15)',
                 }}>
-                <div className="absolute inset-0 flex items-center justify-center text-white font-black text-sm">L</div>
+                <div className="absolute inset-0 flex items-center justify-center text-white font-black text-sm uppercase">
+                  {displayName.charAt(0)}
+                </div>
               </div>
             </div>
           </div>

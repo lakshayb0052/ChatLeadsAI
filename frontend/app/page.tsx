@@ -149,7 +149,7 @@ export default function LandingPage() {
           </div>
 
           {/* CTA */}
-          <a href="/dashboard"
+          <a href="/login?source=dashboard"
             className="btn-primary px-7 py-3.5 rounded-2xl text-sm flex items-center gap-2 group">
             Access Dashboard
             <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
@@ -188,7 +188,7 @@ export default function LandingPage() {
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5 animate-fade-in delay-300">
-            <a href="/dashboard"
+            <a href="/login?source=launch"
               className="btn-primary w-full sm:w-auto px-10 py-5 rounded-2xl text-base font-black flex items-center justify-center gap-3 group">
               <Zap size={20} className="fill-white" />
               Launch Platform
@@ -365,7 +365,7 @@ export default function LandingPage() {
               <p className="text-lg mb-10" style={{ color: 'var(--text-secondary)' }}>
                 Join 500+ businesses automating their WhatsApp lead generation with AI.
               </p>
-              <a href="/dashboard"
+              <a href="/login?source=console"
                 className="btn-primary inline-flex px-12 py-5 rounded-2xl text-lg font-black items-center gap-3 group">
                 <Zap size={22} className="fill-white" />
                 Access the Console
