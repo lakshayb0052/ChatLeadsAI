@@ -1,3 +1,13 @@
+import sys
+
+# Prevent UnicodeEncodeError on Windows when printing emojis
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +32,8 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Creating database tables...")
     SQLModel.metadata.create_all(engine)
+    from database import migrate_db
+    migrate_db(engine)
     
     # Seed default super admin user if not exists
     with Session(engine) as session:
