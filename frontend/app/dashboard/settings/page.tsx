@@ -216,8 +216,8 @@ export default function SettingsPage() {
                           <div onClick={() => setEnabled(!enabled)}
                             className={`w-10 md:w-12 h-5 md:h-6 rounded-full relative cursor-pointer transition-all duration-300 shrink-0`}
                             style={{ background: enabled ? 'linear-gradient(135deg, #2563eb, #1e3a8a)' : 'var(--border-subtle)', border: `1px solid ${enabled ? 'rgba(37,99,235,0.3)' : 'var(--border-subtle)'}`, boxShadow: enabled ? 'var(--glow-purple)' : 'none' }}>
-                            <div className={`absolute top-0.5 w-4 h-4 md:w-5 md:h-5 rounded-full bg-white transition-all duration-300`}
-                              style={{ left: enabled ? 'calc(100% - 18px)' : '2px', md: { left: enabled ? 'calc(100% - 22px)' : '2px' }, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />
+                            <div className={`absolute top-0.5 w-4 h-4 md:w-5 md:h-5 rounded-full bg-white transition-all duration-300 ${enabled ? 'left-[calc(100%-18px)] md:left-[calc(100%-22px)]' : 'left-[2px]'}`}
+                              style={{ boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />
                           </div>
                         </div>
                       );

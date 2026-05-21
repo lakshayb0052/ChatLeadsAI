@@ -126,7 +126,7 @@ function FleetBar({ session, maxLeads, index }: { session: { name: string; leads
 
   return (
     <div className="flex-1 flex flex-col items-center gap-3 group/bar">
-      <div className="w-full relative flex items-end justify-center" style={{ minHeight: '140px', md: { minHeight: '180px' } }}>
+      <div className="w-full relative flex items-end justify-center min-h-[140px] md:min-h-[180px]">
         <div className="relative w-full max-w-[32px] md:max-w-[48px]">
           {/* Tooltip */}
           <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 md:px-3 md:py-1.5 rounded-lg text-[9px] md:text-[10px] font-black text-white opacity-0 group-hover/bar:opacity-100 transition-all duration-300 whitespace-nowrap pointer-events-none z-10"
@@ -406,7 +406,7 @@ export default function DashboardOverview() {
             </div>
           </div>
 
-          <div className="flex-1 flex items-end gap-2 md:gap-4 px-1 md:px-2" style={{ minHeight: '180px', md: { minHeight: '220px' } }}>
+          <div className="flex-1 flex items-end gap-2 md:gap-4 px-1 md:px-2 min-h-[180px] md:min-h-[220px]">
             {stats.fleet.length > 0 ? (
               stats.fleet.map((session, i) => (
                 <FleetBar key={i} session={session} maxLeads={maxLeads} index={i} />

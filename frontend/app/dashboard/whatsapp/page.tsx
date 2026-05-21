@@ -99,7 +99,7 @@ function SessionCard({ session, onDelete, isDeleting }: {
       </div>
 
       {/* Card Body */}
-      <div className="flex-1 p-6 md:p-8 flex flex-col items-center justify-center" style={{ minHeight: '220px', md: { minHeight: '280px' } }}>
+      <div className="flex-1 p-6 md:p-8 flex flex-col items-center justify-center min-h-[220px] md:min-h-[280px]">
         {isConnected ? (
           <div className="text-center space-y-4 md:space-y-5">
             <div className="relative w-20 h-20 md:w-24 md:h-24 mx-auto">
