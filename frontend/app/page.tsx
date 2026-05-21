@@ -123,11 +123,8 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-8 h-24 flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl flex items-center justify-center animate-pulse-glow relative overflow-hidden"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #5b21b6)', border: '1px solid rgba(139,92,246,0.2)' }}>
-              <div className="absolute inset-0 opacity-50"
-                style={{ background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2), transparent)' }} />
-              <Zap size={22} className="text-white fill-white relative z-10" />
+            <div className="w-11 h-11 flex items-center justify-center relative overflow-hidden">
+              <img src="/logo.png" alt="ChatLeadsAI Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <span className="text-xl font-black tracking-tight text-[var(--text-primary)]">ChatLeads</span>
@@ -355,9 +352,8 @@ export default function LandingPage() {
               style={{ border: '2px dashed #8b5cf6' }} />
 
             <div className="relative z-10">
-              <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-8 animate-float"
-                style={{ background: 'linear-gradient(135deg, #7c3aed, #5b21b6)', boxShadow: '0 4px 20px rgba(124,58,237,0.2)' }}>
-                <Zap size={36} className="text-white fill-white" />
+              <div className="w-20 h-20 flex items-center justify-center mx-auto mb-8 animate-float">
+                <img src="/logo.png" alt="ChatLeadsAI Logo" className="w-full h-full object-contain" />
               </div>
               <h2 className="text-5xl font-black tracking-tight text-[var(--text-primary)] mb-5">
                 Ready to Scale?
@@ -380,9 +376,8 @@ export default function LandingPage() {
       <footer className="relative z-10 py-12 border-t text-center animate-fade-in"
         style={{ borderColor: 'var(--border-subtle)' }}>
         <div className="flex items-center justify-center gap-3 mb-4">
-          <div className="w-6 h-6 rounded-lg flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #5b21b6)' }}>
-            <Zap size={12} className="text-white fill-white" />
+          <div className="w-8 h-8 flex items-center justify-center">
+            <img src="/logo.png" alt="ChatLeadsAI Logo" className="w-full h-full object-contain" />
           </div>
           <span className="text-xs font-black text-[var(--text-primary)]">ChatLeads AI</span>
         </div>

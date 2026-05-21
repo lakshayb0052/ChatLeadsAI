@@ -96,12 +96,8 @@ function LoginFormContent() {
 
         {/* Logo and Dynamic Headers */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5 relative overflow-hidden animate-float"
-            style={{
-              background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)',
-              boxShadow: 'var(--glow-purple)',
-            }}>
-            <Zap size={28} className="text-white fill-white relative z-10" />
+          <div className="w-20 h-20 flex items-center justify-center mx-auto mb-5 relative overflow-hidden animate-float">
+            <img src="/logo.png" alt="ChatLeadsAI Logo" className="w-full h-full object-contain" />
           </div>
 
           {source === 'console' ? null : (

@@ -101,15 +101,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex flex-col h-full animate-fade-in">
       {/* Logo */}
       <div className="flex items-center gap-3 mb-10 px-2">
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center animate-float relative overflow-hidden"
-          style={{
-            background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-            border: '1px solid rgba(124,58,237,0.2)',
-            boxShadow: '0 8px 20px rgba(124,58,237,0.2)',
-          }}>
-          <div className="absolute inset-0"
-            style={{ background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15), transparent)' }} />
-          <Zap size={26} className="text-white fill-white relative z-10" />
+        <div className="w-12 h-12 flex items-center justify-center relative overflow-hidden">
+          <img src="/logo.png" alt="ChatLeadsAI Logo" className="w-full h-full object-contain" />
         </div>
         <div>
           <h1 className="text-xl font-black tracking-tight text-[var(--text-primary)]">ChatLeads</h1>
