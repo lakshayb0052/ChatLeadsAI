@@ -68,11 +68,15 @@ async def lifespan(app: FastAPI):
                 session.commit()
                 logger.info("Super admin seeded successfully.")
             else:
-                logger.info("Super admin exists — refreshing password hash with bcrypt...")
+                logger.info("Super admin exists — refreshing all fields with correct values...")
                 admin.hashed_password = fresh_hash
+                admin.role = "superadmin"
+                admin.display_name = "lakshay"
+                admin.company_name = "ChatLeads AI"
+                admin.max_sessions = 9999
                 session.add(admin)
                 session.commit()
-                logger.info("Super admin password hash refreshed successfully.")
+                logger.info(f"Super admin fully refreshed. Role={admin.role}")
                 
         logger.info("=== STARTUP COMPLETE — Database ready! ===")
     except Exception as e:
