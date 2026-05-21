@@ -44,6 +44,8 @@ def get_contacts(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0)
 ):
+    from sqlmodel import text
+    
     statement = select(Contact).order_by(Contact.created_at.desc())
     if current_user.role != "superadmin":
         statement = statement.where(Contact.user_id == current_user.id)
@@ -60,30 +62,59 @@ def get_contacts(
         )
     
     statement = statement.offset(offset).limit(limit)
-    return db.exec(statement).all()
+    contacts = db.exec(statement).all()
+    
+    # Enrich each contact with owner's company info
+    result = []
+    for c in contacts:
+        owner = db.get(User, c.user_id)
+        item = {
+            "id": c.id,
+            "extracted_name": c.extracted_name,
+            "mobile": c.mobile,
+            "email": c.email,
+            "company": c.company,
+            "lead_score": c.lead_score,
+            "confidence": c.confidence,
+            "source_message": c.source_message,
+            "source_type": c.source_type,
+            "session_id": c.session_id,
+            "wa_jid": c.wa_jid,
+            "group_jid": c.group_jid,
+            "created_at": c.created_at,
+            # Enriched company/owner info
+            "owner_company": owner.company_name if owner else None,
+            "owner_name": owner.display_name if owner else None,
+            "owner_email": owner.email if owner else None,
+        }
+        result.append(item)
+    
+    return result
 
 @router.get("/sessions")
 def get_sessions(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all available WhatsApp sessions with lead counts directly from contacts"""
+    """Get all available WhatsApp sessions with lead counts and company info"""
     from sqlalchemy import func
     
-    # Get distinct session IDs and their lead counts directly from the Contact table
-    statement = select(Contact.session_id, func.count(Contact.id)).group_by(Contact.session_id)
+    statement = select(Contact.session_id, Contact.user_id, func.count(Contact.id)).group_by(Contact.session_id, Contact.user_id)
     if current_user.role != "superadmin":
         statement = statement.where(Contact.user_id == current_user.id)
     results = db.exec(statement).all()
     
     sessions_data = []
-    for session_id, count in results:
+    for session_id, user_id, count in results:
         if session_id:
+            owner = db.get(User, user_id)
             sessions_data.append({
                 "session_id": session_id,
                 "status": "archived/active",
                 "lead_count": count,
-                "created_at": None
+                "created_at": None,
+                "owner_company": owner.company_name if owner else None,
+                "owner_name": owner.display_name if owner else None,
             })
             
     return sessions_data

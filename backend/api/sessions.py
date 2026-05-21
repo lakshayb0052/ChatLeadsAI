@@ -187,7 +187,22 @@ async def list_sessions(
         sessions = db.query(WhatsAppSession).all()
     else:
         sessions = db.query(WhatsAppSession).filter(WhatsAppSession.user_id == current_user.id).all()
-    return sessions
+    
+    result = []
+    for s in sessions:
+        owner = db.get(User, s.user_id)
+        result.append({
+            "id": s.id,
+            "session_id": s.session_id,
+            "status": s.status,
+            "qr_code": s.qr_code,
+            "last_seen": s.last_seen,
+            "user_id": s.user_id,
+            "owner_company": owner.company_name if owner else None,
+            "owner_name": owner.display_name if owner else None,
+            "owner_email": owner.email if owner else None,
+        })
+    return result
 
 @router.delete("/{session_id}")
 async def delete_session(
