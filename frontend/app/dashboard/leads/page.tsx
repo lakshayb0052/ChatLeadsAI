@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Download, User, Building2, Calendar,
   Zap, Phone, Mail, ShieldCheck, Trash2, MessageCircle, Server,
-  Wifi, ChevronRight, Briefcase, Hash, Filter
+  Wifi, ChevronRight, Briefcase, Hash, Filter, Edit
 } from 'lucide-react';
 import { useWebSocket } from '../../hooks/useWebSocket';
 
@@ -49,6 +49,63 @@ export default function LeadsPage() {
   const [availableSessions, setAvailableSessions] = useState<SessionInfo[]>([]);
   const [selectedExportSessions, setSelectedExportSessions] = useState<string[]>([]);
   const [userRole, setUserRole] = useState<string>('user');
+
+  // Edit states
+  const [editLead, setEditLead] = useState<Lead | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editMobile, setEditMobile] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editCompany, setEditCompany] = useState('');
+  const [editArn, setEditArn] = useState('');
+  const [editLeadScore, setEditLeadScore] = useState('');
+
+  const startEditing = (lead: Lead) => {
+    setEditLead(lead);
+    setEditName(lead.extracted_name || '');
+    setEditMobile(lead.mobile || '');
+    setEditEmail(lead.email || '');
+    setEditCompany(lead.company || '');
+    setEditArn(lead.arn || '');
+    setEditLeadScore(lead.lead_score || 'Cold');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editLead) return;
+    setSaving(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json'
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      
+      const response = await fetch(`${apiUrl}/contacts/${editLead.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          extracted_name: editName,
+          mobile: editMobile,
+          email: editEmail,
+          company: editCompany,
+          lead_score: editLeadScore,
+          arn: editArn
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update lead');
+      }
+
+      setEditLead(null);
+      fetchLeads();
+    } catch (err) {
+      console.error(err);
+      alert('Error updating lead. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const apiUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '');
   const rawWsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws';
@@ -174,6 +231,116 @@ export default function LeadsPage() {
       className="space-y-6 md:space-y-8 pb-20"
     >
       <AnimatePresence>
+        {/* ── Edit Modal ── */}
+        {editLead && (
+          <Modal>
+            <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl flex items-center justify-center mx-auto"
+              style={{ background: 'rgba(109,40,217,0.05)', border: '1px solid rgba(109,40,217,0.2)' }}>
+              <Edit size={24} className="md:w-7 md:h-7 text-[var(--purple-mid)]" />
+            </div>
+            <h3 className="text-xl md:text-2xl font-black text-center text-[var(--text-primary)]">Edit Lead</h3>
+            <p className="text-center text-xs md:text-sm -mt-2" style={{ color: 'var(--text-secondary)' }}>
+              Modify the details of this lead.
+            </p>
+            
+            <div className="space-y-4 pt-2">
+              <div>
+                <label className="block text-[9px] md:text-[10px] font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Name</label>
+                <input 
+                  type="text" 
+                  value={editName} 
+                  onChange={e => setEditName(e.target.value)}
+                  className="input-dark w-full px-4 py-3 rounded-xl font-bold text-xs md:text-sm transition-all focus:ring-2 focus:ring-[var(--purple-mid)]"
+                  placeholder="e.g. John Doe"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[9px] md:text-[10px] font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Mobile</label>
+                  <input 
+                    type="text" 
+                    value={editMobile} 
+                    onChange={e => setEditMobile(e.target.value)}
+                    className="input-dark w-full px-4 py-3 rounded-xl font-bold text-xs md:text-sm transition-all focus:ring-2 focus:ring-[var(--purple-mid)]"
+                    placeholder="e.g. +1234567890"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] md:text-[10px] font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Email</label>
+                  <input 
+                    type="email" 
+                    value={editEmail} 
+                    onChange={e => setEditEmail(e.target.value)}
+                    className="input-dark w-full px-4 py-3 rounded-xl font-bold text-xs md:text-sm transition-all focus:ring-2 focus:ring-[var(--purple-mid)]"
+                    placeholder="e.g. john@example.com"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[9px] md:text-[10px] font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Company</label>
+                  <input 
+                    type="text" 
+                    value={editCompany} 
+                    onChange={e => setEditCompany(e.target.value)}
+                    className="input-dark w-full px-4 py-3 rounded-xl font-bold text-xs md:text-sm transition-all focus:ring-2 focus:ring-[var(--purple-mid)]"
+                    placeholder="e.g. Acme Corp"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] md:text-[10px] font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>ARN (Ref)</label>
+                  <input 
+                    type="text" 
+                    value={editArn} 
+                    onChange={e => setEditArn(e.target.value)}
+                    className="input-dark w-full px-4 py-3 rounded-xl font-bold text-xs md:text-sm transition-all focus:ring-2 focus:ring-[var(--purple-mid)]"
+                    placeholder="e.g. ARN123456"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[9px] md:text-[10px] font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Lead Score</label>
+                <div className="relative">
+                  <select 
+                    value={editLeadScore} 
+                    onChange={e => setEditLeadScore(e.target.value)}
+                    className="hover:border-[var(--border-bright)] transition-colors text-xs md:text-sm w-full"
+                    style={{ ...selectStyle, paddingLeft: '1rem', paddingRight: '2rem' }}>
+                    <option value="Hot">🔥 Hot</option>
+                    <option value="Warm">⚡ Warm</option>
+                    <option value="Cold">❄️ Cold</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+              <button 
+                onClick={() => setEditLead(null)}
+                disabled={saving}
+                className="flex-1 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-opacity-80 transition-all disabled:opacity-50"
+                style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveEdit}
+                disabled={saving}
+                className="btn-primary flex-1 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                {saving ? (
+                  <motion.div 
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="w-4 h-4 rounded-full border-2 border-white border-t-transparent"
+                  />
+                ) : 'Save Changes'}
+              </button>
+            </div>
+          </Modal>
+        )}
+
         {/* ── Delete Modal ── */}
         {deleteId && (
           <Modal>
@@ -481,6 +648,7 @@ export default function LeadsPage() {
               key={lead.id} lead={lead} index={i}
               isSuperAdmin={isSuperAdmin}
               onDelete={() => setDeleteId(lead.id)}
+              onEdit={() => startEditing(lead)}
             />
           ))}
         </motion.div>
@@ -489,8 +657,8 @@ export default function LeadsPage() {
   );
 }
 
-function LeadCard({ lead, index, isSuperAdmin, onDelete }: {
-  lead: Lead; index: number; isSuperAdmin: boolean; onDelete: () => void;
+function LeadCard({ lead, index, isSuperAdmin, onDelete, onEdit }: {
+  lead: Lead; index: number; isSuperAdmin: boolean; onDelete: () => void; onEdit: () => void;
 }) {
   const isHot = lead.lead_score === 'Hot';
   const isWarm = lead.lead_score === 'Warm';
@@ -628,6 +796,17 @@ function LeadCard({ lead, index, isSuperAdmin, onDelete }: {
               </div>
               <p className="text-[8px] md:text-[9px] font-black uppercase tracking-widest" style={{ color: 'var(--text-ghost)' }}>Confidence</p>
             </div>
+
+            {isSuperAdmin && (
+              <motion.button 
+                whileHover={{ scale: 1.1, backgroundColor: 'rgba(109,40,217,0.1)', borderColor: 'rgba(109,40,217,0.2)' }}
+                whileTap={{ scale: 0.9 }}
+                onClick={onEdit}
+                className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center transition-colors shrink-0 group"
+                style={{ background: 'rgba(109,40,217,0.04)', border: '1px solid rgba(109,40,217,0.08)' }}>
+                <Edit size={16} className="md:w-4 md:h-4 text-[var(--text-muted)] group-hover:text-[var(--purple-mid)] transition-colors" />
+              </motion.button>
+            )}
 
             <motion.button 
               whileHover={{ scale: 1.1, backgroundColor: 'rgba(220,38,38,0.1)', borderColor: 'rgba(220,38,38,0.2)' }}

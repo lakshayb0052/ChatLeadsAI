@@ -78,6 +78,33 @@ async def lifespan(app: FastAPI):
                 session.commit()
                 logger.info(f"Super admin fully refreshed. Role={admin.role}")
                 
+            # Upsert default company user — always refresh the password hash to recover
+            # from any corruption or lost credentials
+            company_user = session.exec(select(User).where(User.email == "company@chatleads.ai")).first()
+            if not company_user:
+                logger.info("Seeding default company user...")
+                company_user = User(
+                    email="company@chatleads.ai",
+                    hashed_password=fresh_hash,
+                    display_name="company",
+                    role="user",
+                    company_name="ChatLeads AI Inc",
+                    max_sessions=5
+                )
+                session.add(company_user)
+                session.commit()
+                logger.info("Default company user seeded successfully.")
+            else:
+                logger.info("Default company user exists — refreshing all fields with correct values...")
+                company_user.hashed_password = fresh_hash
+                company_user.role = "user"
+                company_user.display_name = "company"
+                company_user.company_name = "ChatLeads AI Inc"
+                company_user.max_sessions = 5
+                session.add(company_user)
+                session.commit()
+                logger.info(f"Default company user fully refreshed. Email={company_user.email}")
+                
         logger.info("=== STARTUP COMPLETE — Database ready! ===")
     except Exception as e:
         _startup_error = traceback.format_exc()

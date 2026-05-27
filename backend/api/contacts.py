@@ -6,6 +6,15 @@ from typing import List, Optional
 from datetime import datetime
 from core.auth import get_current_user, oauth2_scheme, SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
+from pydantic import BaseModel
+
+class ContactUpdate(BaseModel):
+    extracted_name: Optional[str] = None
+    mobile: Optional[str] = None
+    email: Optional[str] = None
+    company: Optional[str] = None
+    lead_score: Optional[str] = None
+    arn: Optional[str] = None
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
@@ -264,3 +273,57 @@ async def delete_contact(
     await manager.broadcast({"event": "lead_updated", "data": {"action": "delete", "id": contact_id}})
     
     return {"status": "success"}
+
+@router.put("/{contact_id}")
+async def update_contact(
+    contact_id: int,
+    contact_update: ContactUpdate,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Forbidden: Only superadmins are allowed to edit leads")
+        
+    contact = db.get(Contact, contact_id)
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+        
+    update_data = contact_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(contact, key, value)
+        
+    db.add(contact)
+    db.commit()
+    db.refresh(contact)
+    
+    owner = db.get(User, contact.user_id)
+    enriched_contact = {
+        "id": contact.id,
+        "extracted_name": contact.extracted_name,
+        "mobile": contact.mobile,
+        "email": contact.email,
+        "arn": contact.arn,
+        "company": contact.company,
+        "lead_score": contact.lead_score,
+        "confidence": contact.confidence,
+        "source_message": contact.source_message,
+        "source_type": contact.source_type,
+        "session_id": contact.session_id,
+        "wa_jid": contact.wa_jid,
+        "group_jid": contact.group_jid,
+        "created_at": contact.created_at.isoformat() if hasattr(contact.created_at, 'isoformat') else str(contact.created_at),
+        "owner_company": owner.company_name if owner else None,
+        "owner_name": owner.display_name if owner else None,
+        "owner_email": owner.email if owner else None,
+    }
+    
+    from core.ws import manager
+    await manager.broadcast({
+        "event": "lead_updated",
+        "data": {
+            "action": "update",
+            "contact": enriched_contact
+        }
+    })
+    
+    return enriched_contact
