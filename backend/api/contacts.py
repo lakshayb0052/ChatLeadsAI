@@ -218,13 +218,43 @@ async def export_contacts(
 
 @router.delete("/all")
 async def delete_all_contacts(
+    session_id: Optional[str] = None,
+    company: Optional[str] = None,
+    score: Optional[str] = None,
+    query: Optional[str] = None,
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role == "superadmin":
-        count = db.query(Contact).delete()
-    else:
-        count = db.query(Contact).filter(Contact.user_id == current_user.id).delete()
+    statement = select(Contact)
+    
+    if current_user.role != "superadmin":
+        statement = statement.where(Contact.user_id == current_user.id)
+        
+    if session_id:
+        statement = statement.where(Contact.session_id == session_id)
+        
+    if company:
+        # Get users belonging to this company
+        user_ids = db.exec(select(User.id).where(User.company_name == company)).all()
+        statement = statement.where(Contact.user_id.in_(user_ids))
+        
+    if score:
+        statement = statement.where(Contact.lead_score == score)
+        
+    if query:
+        statement = statement.where(
+            (Contact.extracted_name.contains(query)) | 
+            (Contact.email.contains(query)) | 
+            (Contact.mobile.contains(query))
+        )
+        
+    # Fetch all matching contacts to delete them
+    contacts_to_delete = db.exec(statement).all()
+    count = len(contacts_to_delete)
+    
+    for contact in contacts_to_delete:
+        db.delete(contact)
+        
     db.commit()
     
     # Notify all dashboards

@@ -49,6 +49,11 @@ export default function LeadsPage() {
   const [availableSessions, setAvailableSessions] = useState<SessionInfo[]>([]);
   const [selectedExportSessions, setSelectedExportSessions] = useState<string[]>([]);
   const [userRole, setUserRole] = useState<string>('user');
+  
+  // Selective wipe states
+  const [wipeSession, setWipeSession] = useState('');
+  const [wipeCompany, setWipeCompany] = useState('');
+  const [wipeScore, setWipeScore] = useState('');
 
   // Edit states
   const [editLead, setEditLead] = useState<Lead | null>(null);
@@ -181,7 +186,15 @@ export default function LeadsPage() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     const headers: HeadersInit = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    await fetch(`${apiUrl}/contacts/all`, { method: 'DELETE', headers });
+    
+    const params = new URLSearchParams();
+    if (isSuperAdmin) {
+      if (wipeSession) params.append('session_id', wipeSession);
+      if (wipeCompany) params.append('company', wipeCompany);
+      if (wipeScore) params.append('score', wipeScore);
+    }
+    
+    await fetch(`${apiUrl}/contacts/all?${params}`, { method: 'DELETE', headers });
     setShowDeleteAll(false); fetchLeads();
   };
 
@@ -356,19 +369,73 @@ export default function LeadsPage() {
               <ShieldCheck size={28} className="text-red-600" />
             </div>
             <h3 className="text-2xl md:text-3xl font-black text-center text-[var(--text-primary)]">System Wipe?</h3>
-            <p className="text-center text-xs md:text-sm" style={{ color: 'var(--text-secondary)' }}>
-              You are about to permanently delete <strong className="text-[var(--text-primary)]">ALL</strong> contacts and lead data.
+            <p className="text-center text-xs md:text-sm -mt-2" style={{ color: 'var(--text-secondary)' }}>
+              Choose filters to selectively wipe lead data, or wipe everything.
             </p>
+
+            {isSuperAdmin && (
+              <div className="space-y-4 py-2 border-t border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--purple-mid)]">Target Filters</p>
+                
+                <div>
+                  <label className="block text-[9px] md:text-[10px] font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Session</label>
+                  <div className="relative">
+                    <Wifi size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-ghost)' }} />
+                    <select value={wipeSession} onChange={e => setWipeSession(e.target.value)}
+                      className="hover:border-[var(--border-bright)] transition-colors text-xs"
+                      style={{ ...selectStyle, paddingLeft: '2rem', paddingRight: '1rem', minHeight: '40px' }}>
+                      <option value="">All Sessions (Wipe across all)</option>
+                      {availableSessions.map(s => (
+                        <option key={s.session_id} value={s.session_id}>
+                          {s.session_id.replace(/_/g, ' ')}{s.owner_company ? ` — ${s.owner_company}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] md:text-[10px] font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Company</label>
+                  <div className="relative">
+                    <Briefcase size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-ghost)' }} />
+                    <select value={wipeCompany} onChange={e => setWipeCompany(e.target.value)}
+                      className="hover:border-[var(--border-bright)] transition-colors text-xs"
+                      style={{ ...selectStyle, paddingLeft: '2rem', paddingRight: '1rem', minHeight: '40px' }}>
+                      <option value="">All Companies (Wipe across all)</option>
+                      {uniqueCompanies.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] md:text-[10px] font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Lead Score</label>
+                  <div className="relative">
+                    <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-ghost)' }} />
+                    <select value={wipeScore} onChange={e => setWipeScore(e.target.value)}
+                      className="hover:border-[var(--border-bright)] transition-colors text-xs"
+                      style={{ ...selectStyle, paddingLeft: '2rem', paddingRight: '1rem', minHeight: '40px' }}>
+                      <option value="">All Scores (Wipe across all)</option>
+                      <option value="Hot">🔥 Hot Only</option>
+                      <option value="Warm">⚡ Warm Only</option>
+                      <option value="Cold">❄️ Cold Only</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col md:flex-row gap-3 pt-2">
               <button onClick={() => setShowDeleteAll(false)}
-                className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest"
+                className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
                 style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
                 Cancel
               </button>
               <button onClick={confirmDeleteAll}
                 className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-white hover:scale-105 active:scale-95 transition-all"
                 style={{ background: 'linear-gradient(135deg, #dc2626, #991b1b)', boxShadow: '0 4px 20px rgba(220,38,38,0.25)' }}>
-                Wipe Everything
+                {wipeSession || wipeCompany || wipeScore ? 'Wipe Selected' : 'Wipe Everything'}
               </button>
             </div>
           </Modal>
@@ -460,16 +527,23 @@ export default function LeadsPage() {
           </p>
         </div>
         <div className="flex gap-2 md:gap-3 w-full md:w-auto mt-2 md:mt-0">
-          <motion.button 
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowDeleteAll(true)}
-            className="flex-1 md:flex-none px-4 md:px-6 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest flex justify-center items-center gap-2 transition-all group"
-            style={{ background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.08)', color: '#dc2626' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.04)'; }}>
-            <Trash2 size={14} className="md:w-4 md:h-4 group-hover:rotate-12 transition-transform" /> Wipe All
-          </motion.button>
+          {isSuperAdmin && (
+            <motion.button 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                setWipeSession(filterSession);
+                setWipeCompany(filterCompany);
+                setWipeScore(filterScore);
+                setShowDeleteAll(true);
+              }}
+              className="flex-1 md:flex-none px-4 md:px-6 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest flex justify-center items-center gap-2 transition-all group"
+              style={{ background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.08)', color: '#dc2626' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.04)'; }}>
+              <Trash2 size={14} className="md:w-4 md:h-4 group-hover:rotate-12 transition-transform" /> Wipe All
+            </motion.button>
+          )}
           <motion.button 
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}

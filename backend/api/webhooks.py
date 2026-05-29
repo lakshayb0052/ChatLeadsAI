@@ -67,7 +67,7 @@ async def process_lead_background(msg: WhatsAppMessage, image_bytes: Optional[by
             # If both are absent, we immediately skip/reject it.
             has_contact_info = False
             
-            if mobile != "absent" and mobile and len(str(mobile)) >= 10:
+            if mobile != "absent" and mobile and len(str(mobile)) >= 8:
                 has_contact_info = True
             if email != "absent" and email and "@" in str(email):
                 has_contact_info = True

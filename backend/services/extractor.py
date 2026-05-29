@@ -32,8 +32,8 @@ def get_system_prompt(text_content: str, context: Optional[str] = None) -> str:
         You are an Expert Lead Generation Agent. Your task is to analyze the provided input (which can be a Text message, an attached Image, or BOTH together) to identify a potential lead.
         
         CRITICAL PIPELINE INSTRUCTIONS:
-        1. FIRST, analyze the input (both the Text caption/message AND/OR the attached Image simultaneously) to see if a contact (mobile phone number) or email (mail) is present.
-           - A contact is a phone number (e.g., 10-digit mobile number, or with country code).
+        1. FIRST, analyze the input (both the Text caption/message AND/OR the attached Image simultaneously) to see if a contact (mobile phone number or landline) or email (mail) is present.
+           - A contact is a phone number (e.g., 10-digit mobile number, with or without spaces/dashes/formatting, or with a country/area prefix like +91 82958 86832, 82958 86832, 011 4464 2345, 011-4464-2345).
            - An email is an email address (e.g., matching standard email pattern, gmail, company email).
         2. IF AND ONLY IF at least one of these contact details (mobile or email) is present in either the text or the image, proceed to find the name of the person (the lead) and the Application Reference Number (ARN) if present.
            - If a text caption and an image are sent together, synthesize them: extract the name, email, and mobile from the text, and extract the Application Reference Number (ARN) from the image (or vice versa), compiling them into a single, unified lead record.
@@ -70,7 +70,7 @@ def get_system_prompt(text_content: str, context: Optional[str] = None) -> str:
         
         REQUIRED JSON FIELDS:
         1. name: The extracted name of the real person or "absent".
-        2. mobile: The extracted 10-digit number or "absent".
+        2. mobile: The extracted phone number (as-is, with formatting/spaces/country codes if present) or "absent". Do not force it to be strictly 10 digits; extract the full number from the text/image.
         3. email: The extracted email or "absent".
         4. arn: The extracted Application Reference Number (ARN) or "absent".
         
@@ -242,8 +242,18 @@ class ExtractorService:
                 # Validate and clean mobile number
                 if result['mobile'] != 'absent':
                     clean_mobile = re.sub(r'\D', '', str(result['mobile']))
-                    if len(clean_mobile) >= 10:
-                        result['mobile'] = clean_mobile[-10:]
+                    if len(clean_mobile) >= 8:
+                        # If it's a standard Indian mobile number (e.g. starts with country code 91 and has 12 digits), normalize to 10 digits
+                        if len(clean_mobile) == 12 and clean_mobile.startswith('91'):
+                            result['mobile'] = clean_mobile[-10:]
+                        # If it starts with 0 and has 11 digits (like standard STD landlines 011 4464 2345), keep all 11 digits
+                        elif len(clean_mobile) == 11 and clean_mobile.startswith('0'):
+                            result['mobile'] = clean_mobile
+                        # Otherwise keep the full cleaned digits if it's 8 to 15 digits
+                        elif 8 <= len(clean_mobile) <= 15:
+                            result['mobile'] = clean_mobile
+                        else:
+                            result['mobile'] = 'absent'
                     else:
                         result['mobile'] = 'absent'
                 
@@ -268,9 +278,20 @@ class ExtractorService:
         # Enhanced regex patterns
         patterns = {
             'mobile': [
+                # 1. With country code +91 or 91 and spaces, e.g. +91 82958 86832, 91-82958-86832
+                r'\+?91[\s\-]+\d{5}[\s\-]+\d{5}',
+                r'\+?91[\s\-]+\d{3,4}[\s\-]+\d{3,4}[\s\-]+\d{3,4}',
+                # 2. 10-digit number split in various ways, e.g. 82958 86832, 829-588-6832
+                r'\b[6-9]\d{4}[\s\-]+\d{5}\b',
+                r'\b[6-9]\d{2}[\s\-]+\d{3}[\s\-]+\d{4}\b',
+                r'\b[6-9]\d{2}[\s\-]+\d{4}[\s\-]+\d{3}\b',
+                # 3. Landline formats, e.g. 011 4464 2345, 011-4464-2345
+                r'\b0\d{2,4}[\s\-]+\d{3,4}[\s\-]+\d{3,4}\b',
+                # 4. Standard contiguous formats with optional country/area prefixes
                 r'(?:\+91|91|0)?[6-9][\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d',
                 r'[6-9]\d{9}',
-                r'\b\d{10}\b'
+                r'\b\d{10}\b',
+                r'\b\d{8,11}\b'
             ],
             'email': [
                 r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
@@ -298,8 +319,18 @@ class ExtractorService:
             matches = re.findall(pattern, clean_text)
             for m in matches:
                 digits = re.sub(r'\D', '', m)
-                if len(digits) >= 10:
-                    mobile = digits[-10:]
+                if len(digits) >= 8:
+                    # If it's a standard Indian mobile number (e.g. starts with country code 91 and has 12 digits), normalize to 10 digits
+                    if len(digits) == 12 and digits.startswith('91'):
+                        mobile = digits[-10:]
+                    # If it starts with 0 and has 11 digits (like standard STD landlines 011 4464 2345), keep all 11 digits
+                    elif len(digits) == 11 and digits.startswith('0'):
+                        mobile = digits
+                    # Otherwise keep the full cleaned digits if it's 8 to 15 digits
+                    elif 8 <= len(digits) <= 15:
+                        mobile = digits
+                    else:
+                        continue
                     break
             if mobile != "absent":
                 break
