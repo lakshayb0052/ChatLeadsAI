@@ -130,14 +130,15 @@ def get_contacts(
         ).all()
         if agent_leads:
             agents = db.exec(select(Agent)).all()
-            agent_map = {(a.user_id, a.lg_code.strip().upper()): a for a in agents}
+            agent_map_by_user = {(a.user_id, a.lg_code.strip().upper()): a for a in agents}
+            agent_map_global = {a.lg_code.strip().upper(): a for a in agents}
             healed = False
             for lead in agent_leads:
                 lg_val = str(lead.lg_code).strip()
                 if lg_val and lg_val.upper() != "N/A" and lg_val != "":
                     key = (lead.user_id, lg_val.upper())
-                    if key in agent_map:
-                        agent_info = agent_map[key]
+                    agent_info = agent_map_by_user.get(key) or agent_map_global.get(lg_val.upper())
+                    if agent_info:
                         # Heal if unpopulated OR if details differ from latest database values
                         if (not lead.executive_name or 
                             lead.executive_name.strip() in ["", "N/A"] or
@@ -229,6 +230,12 @@ def get_contacts(
             "remarks": c.remarks,
             "excel_updated": c.excel_updated,
             "excel_updated_at": c.excel_updated_at.isoformat() if c.excel_updated_at else None,
+            # Location & Agent Details
+            "executive_name": c.executive_name,
+            "executive_code": c.executive_code,
+            "agent_city": c.agent_city,
+            "agent_place": c.agent_place,
+            "agent_venue": c.agent_venue,
         }
         result.append(item)
     
