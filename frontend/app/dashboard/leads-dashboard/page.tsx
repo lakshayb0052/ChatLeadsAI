@@ -1627,68 +1627,23 @@ export default function LeadsDashboard() {
                     <div className="grid grid-cols-2 gap-3 text-xs p-4 rounded-2xl border" style={{ background: 'var(--bg-deep)', borderColor: 'var(--border-subtle)' }}>
                       <div>
                         <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Executive Name</p>
-                        {!isEditing ? (
-                          <p className="font-black text-[var(--text-primary)] mt-0.5">{selectedLead.executive_name || 'N/A'}</p>
-                        ) : (
-                          <input 
-                            type="text" 
-                            value={editForm.executive_name || ''} 
-                            onChange={e => setEditForm({...editForm, executive_name: e.target.value})}
-                            className="input-dark w-full px-2.5 py-1 rounded-md text-xs font-bold mt-1 focus:ring-1 focus:ring-[var(--purple-mid)]"
-                          />
-                        )}
+                        <p className="font-black text-[var(--text-primary)] mt-0.5">{isEditing ? (editForm.executive_name || 'N/A') : (selectedLead.executive_name || 'N/A')}</p>
                       </div>
                       <div>
                         <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Executive Code</p>
-                        {!isEditing ? (
-                          <p className="font-black text-[var(--text-primary)] mt-0.5">{selectedLead.executive_code || 'N/A'}</p>
-                        ) : (
-                          <input 
-                            type="text" 
-                            value={editForm.executive_code || ''} 
-                            onChange={e => setEditForm({...editForm, executive_code: e.target.value})}
-                            className="input-dark w-full px-2.5 py-1 rounded-md text-xs font-bold mt-1 focus:ring-1 focus:ring-[var(--purple-mid)]"
-                          />
-                        )}
+                        <p className="font-black text-[var(--text-primary)] mt-0.5">{isEditing ? (editForm.executive_code || 'N/A') : (selectedLead.executive_code || 'N/A')}</p>
                       </div>
                       <div>
                         <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">City</p>
-                        {!isEditing ? (
-                          <p className="font-bold text-[var(--text-primary)] mt-0.5">{selectedLead.agent_city || 'N/A'}</p>
-                        ) : (
-                          <input 
-                            type="text" 
-                            value={editForm.agent_city || ''} 
-                            onChange={e => setEditForm({...editForm, agent_city: e.target.value})}
-                            className="input-dark w-full px-2.5 py-1 rounded-md text-xs font-bold mt-1 focus:ring-1 focus:ring-[var(--purple-mid)]"
-                          />
-                        )}
+                        <p className="font-bold text-[var(--text-primary)] mt-0.5">{isEditing ? (editForm.agent_city || 'N/A') : (selectedLead.agent_city || 'N/A')}</p>
                       </div>
                       <div>
                         <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Place / Area</p>
-                        {!isEditing ? (
-                          <p className="font-bold text-[var(--text-primary)] mt-0.5">{selectedLead.agent_place || 'N/A'}</p>
-                        ) : (
-                          <input 
-                            type="text" 
-                            value={editForm.agent_place || ''} 
-                            onChange={e => setEditForm({...editForm, agent_place: e.target.value})}
-                            className="input-dark w-full px-2.5 py-1 rounded-md text-xs font-bold mt-1 focus:ring-1 focus:ring-[var(--purple-mid)]"
-                          />
-                        )}
+                        <p className="font-bold text-[var(--text-primary)] mt-0.5">{isEditing ? (editForm.agent_place || 'N/A') : (selectedLead.agent_place || 'N/A')}</p>
                       </div>
                       <div className="col-span-2 border-t pt-2 mt-1" style={{ borderColor: 'var(--border-subtle)' }}>
                         <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Venue / Retail Store</p>
-                        {!isEditing ? (
-                          <p className="font-black text-[var(--purple-mid)] mt-0.5">{selectedLead.agent_venue || 'N/A'}</p>
-                        ) : (
-                          <input 
-                            type="text" 
-                            value={editForm.agent_venue || ''} 
-                            onChange={e => setEditForm({...editForm, agent_venue: e.target.value})}
-                            className="input-dark w-full px-2.5 py-1 rounded-md text-xs font-bold mt-1 focus:ring-1 focus:ring-[var(--purple-mid)]"
-                          />
-                        )}
+                        <p className="font-black text-[var(--purple-mid)] mt-0.5">{isEditing ? (editForm.agent_venue || 'N/A') : (selectedLead.agent_venue || 'N/A')}</p>
                       </div>
                     </div>
                   </div>

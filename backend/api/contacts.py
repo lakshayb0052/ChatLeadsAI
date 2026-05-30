@@ -453,8 +453,55 @@ async def update_contact(
         raise HTTPException(status_code=403, detail="Forbidden: You do not own this lead entry")
         
     update_data = contact_update.dict(exclude_unset=True)
+    
+    # Exclude location & agent details from client updates to enforce server-side lg_code matching
+    for field in ["executive_name", "executive_code", "agent_city", "agent_place", "agent_venue"]:
+        update_data.pop(field, None)
+        
     for key, value in update_data.items():
         setattr(contact, key, value)
+        
+    # Look up and populate Location & Agent details from matching lg_code if lg_code was updated
+    if "lg_code" in update_data:
+        lg_val = update_data.get("lg_code")
+        if lg_val and str(lg_val).strip() != "" and str(lg_val).strip().upper() != "N/A":
+            lg_clean = str(lg_val).strip()
+            from sqlmodel import func
+            agent_info = db.exec(
+                select(Agent)
+                .where(func.upper(Agent.lg_code) == lg_clean.upper())
+                .where(Agent.user_id == contact.user_id)
+            ).first()
+            if not agent_info:
+                agent_info = db.exec(
+                    select(Agent)
+                    .where(func.upper(Agent.lg_code) == lg_clean.upper())
+                    .where(Agent.user_id == current_user.id)
+                ).first()
+            if not agent_info:
+                agent_info = db.exec(
+                    select(Agent)
+                    .where(func.upper(Agent.lg_code) == lg_clean.upper())
+                ).first()
+                
+            if agent_info:
+                contact.executive_name = agent_info.executive_name
+                contact.executive_code = agent_info.executive_code
+                contact.agent_city = agent_info.city
+                contact.agent_place = agent_info.place
+                contact.agent_venue = agent_info.venue
+            else:
+                contact.executive_name = "N/A"
+                contact.executive_code = "N/A"
+                contact.agent_city = "N/A"
+                contact.agent_place = "N/A"
+                contact.agent_venue = "N/A"
+        else:
+            contact.executive_name = "N/A"
+            contact.executive_code = "N/A"
+            contact.agent_city = "N/A"
+            contact.agent_place = "N/A"
+            contact.agent_venue = "N/A"
         
     db.add(contact)
     db.commit()
@@ -592,7 +639,7 @@ async def upload_excel(
             lead.excel_updated_at = datetime.utcnow()
             
             # Look up and populate Location & Agent details from matching lg_code
-            if lead.lg_code:
+            if lead.lg_code and str(lead.lg_code).strip() != "" and str(lead.lg_code).strip().upper() != "N/A":
                 lg_clean = str(lead.lg_code).strip()
                 from sqlmodel import func
                 agent_info = db.exec(
@@ -600,12 +647,36 @@ async def upload_excel(
                     .where(func.upper(Agent.lg_code) == lg_clean.upper())
                     .where(Agent.user_id == lead.user_id)
                 ).first()
+                if not agent_info:
+                    agent_info = db.exec(
+                        select(Agent)
+                        .where(func.upper(Agent.lg_code) == lg_clean.upper())
+                        .where(Agent.user_id == current_user.id)
+                    ).first()
+                if not agent_info:
+                    agent_info = db.exec(
+                        select(Agent)
+                        .where(func.upper(Agent.lg_code) == lg_clean.upper())
+                    ).first()
+                
                 if agent_info:
                     lead.executive_name = agent_info.executive_name
                     lead.executive_code = agent_info.executive_code
                     lead.agent_city = agent_info.city
                     lead.agent_place = agent_info.place
                     lead.agent_venue = agent_info.venue
+                else:
+                    lead.executive_name = "N/A"
+                    lead.executive_code = "N/A"
+                    lead.agent_city = "N/A"
+                    lead.agent_place = "N/A"
+                    lead.agent_venue = "N/A"
+            else:
+                lead.executive_name = "N/A"
+                lead.executive_code = "N/A"
+                lead.agent_city = "N/A"
+                lead.agent_place = "N/A"
+                lead.agent_venue = "N/A"
             
             db.add(lead)
             matched_count += 1
