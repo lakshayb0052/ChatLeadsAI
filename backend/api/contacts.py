@@ -121,6 +121,30 @@ def get_contacts(
 ):
     from sqlmodel import text
     
+    # Dynamic heal/enrichment for unmatched agent fields
+    try:
+        unpopulated_agent_leads = db.exec(
+            select(Contact)
+            .where(Contact.lg_code != None)
+            .where(Contact.executive_name == None)
+        ).all()
+        if unpopulated_agent_leads:
+            agents = db.exec(select(Agent)).all()
+            agent_map = {(a.user_id, a.lg_code.strip().upper()): a for a in agents}
+            for lead in unpopulated_agent_leads:
+                key = (lead.user_id, lead.lg_code.strip().upper())
+                if key in agent_map:
+                    agent_info = agent_map[key]
+                    lead.executive_name = agent_info.executive_name
+                    lead.executive_code = agent_info.executive_code
+                    lead.agent_city = agent_info.city
+                    lead.agent_place = agent_info.place
+                    lead.agent_venue = agent_info.venue
+                    db.add(lead)
+            db.commit()
+    except Exception as e:
+        print("Dynamic agent enrichment skipped:", e)
+        
     statement = select(Contact).order_by(Contact.created_at.desc())
     if current_user.role != "superadmin":
         statement = statement.where(Contact.user_id == current_user.id)

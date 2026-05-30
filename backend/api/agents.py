@@ -63,6 +63,26 @@ def create_agent(
     db.add(db_agent)
     db.commit()
     db.refresh(db_agent)
+    
+    # Automatically sweep and populate existing contacts matching this lg_code
+    try:
+        from models import Contact
+        existing_contacts = db.exec(
+            select(Contact)
+            .where(Contact.user_id == current_user.id)
+        ).all()
+        for c in existing_contacts:
+            if c.lg_code and c.lg_code.strip().upper() == lg_code_clean.upper():
+                c.executive_name = db_agent.executive_name
+                c.executive_code = db_agent.executive_code
+                c.agent_city = db_agent.city
+                c.agent_place = db_agent.place
+                c.agent_venue = db_agent.venue
+                db.add(c)
+        db.commit()
+    except Exception as e:
+        print("Agent creation sweep skipped:", e)
+        
     return db_agent
 
 @router.get("/", response_model=List[AgentResponse])
