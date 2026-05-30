@@ -30,7 +30,7 @@ class AgentResponse(BaseModel):
         orm_mode = True
 
 @router.post("/", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
-def create_agent(
+async def create_agent(
     agent_in: AgentCreate,
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
@@ -67,10 +67,12 @@ def create_agent(
     # Automatically sweep and populate existing contacts matching this lg_code
     try:
         from models import Contact
+        from core.ws import manager
         existing_contacts = db.exec(
             select(Contact)
             .where(Contact.user_id == current_user.id)
         ).all()
+        swept = False
         for c in existing_contacts:
             if c.lg_code and c.lg_code.strip().upper() == lg_code_clean.upper():
                 c.executive_name = db_agent.executive_name
@@ -79,7 +81,15 @@ def create_agent(
                 c.agent_place = db_agent.place
                 c.agent_venue = db_agent.venue
                 db.add(c)
-        db.commit()
+                swept = True
+        if swept:
+            db.commit()
+            await manager.broadcast({
+                "event": "lead_updated",
+                "data": {
+                    "action": "bulk_update"
+                }
+            })
     except Exception as e:
         print("Agent creation sweep skipped:", e)
         
