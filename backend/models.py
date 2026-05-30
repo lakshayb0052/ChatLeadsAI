@@ -38,3 +38,33 @@ class Contact(SQLModel, table=True):
     lead_score: Optional[str] = None  # Hot, Warm, Cold
     arn: Optional[str] = Field(default=None)
 
+    # Excel Matched Fields
+    creation_date_time: Optional[str] = Field(default=None, nullable=True)
+    customer_type: Optional[str] = Field(default=None, nullable=True)
+    state: Optional[str] = Field(default=None, nullable=True)
+    pincode: Optional[str] = Field(default=None, nullable=True)
+    lg_code: Optional[str] = Field(default=None, nullable=True)
+    ipa_status: Optional[str] = Field(default=None, nullable=True)
+    dropoff_reason: Optional[str] = Field(default=None, nullable=True)
+    idcom_status: Optional[str] = Field(default=None, nullable=True)
+    vkyc_status: Optional[str] = Field(default=None, nullable=True)
+    vkyc_consent_date: Optional[str] = Field(default=None, nullable=True)
+    vkyc_expiry_date: Optional[str] = Field(default=None, nullable=True)
+    capture_link: Optional[str] = Field(default=None, nullable=True)
+    final_decision: Optional[str] = Field(default=None, nullable=True)
+    final_decision_date: Optional[str] = Field(default=None, nullable=True)
+    current_stage: Optional[str] = Field(default=None, nullable=True)
+    kyc_status: Optional[str] = Field(default=None, nullable=True)
+    decline_type: Optional[str] = Field(default=None, nullable=True)
+    product_des: Optional[str] = Field(default=None, nullable=True)
+    kyc_success_nr: Optional[str] = Field(default=None, nullable=True)
+    card_type: Optional[str] = Field(default=None, nullable=True)
+    card_active_status: Optional[str] = Field(default=None, nullable=True)
+    application_id: Optional[str] = Field(default=None, nullable=True)
+    remarks: Optional[str] = Field(default=None, nullable=True)
+
+    # Tracking match
+    excel_updated: bool = Field(default=False, nullable=True)
+    excel_updated_at: Optional[datetime] = Field(default=None, nullable=True)
+
+

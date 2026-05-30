@@ -1,12 +1,45 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlmodel import Session, select
 from database import get_session
 from models import Contact, WhatsAppSession, User
 from typing import List, Optional
 from datetime import datetime
+import datetime as dt_module
 from core.auth import get_current_user, oauth2_scheme, SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
 from pydantic import BaseModel
+import pandas as pd
+import io
+
+FIELD_MAPPINGS = {
+    "creation_date_time": ["creationdatetime", "creationdate", "datetime", "createdat", "createdtime"],
+    "customer_type": ["customertype", "custtype"],
+    "state": ["state"],
+    "pincode": ["pincode", "pin", "zip", "zipcode"],
+    "lg_code": ["lgcode", "lg_code"],
+    "ipa_status": ["ipastatus", "ipa"],
+    "dropoff_reason": ["dropoffreason", "dropoff"],
+    "idcom_status": ["idcomstatus", "idcom"],
+    "vkyc_status": ["vkycstatus", "vkyc"],
+    "vkyc_consent_date": ["vkycconsentdate", "consentdate"],
+    "vkyc_expiry_date": ["vkycexpirydate", "expirydate"],
+    "capture_link": ["capturelink", "link"],
+    "final_decision": ["finaldecision", "decision"],
+    "final_decision_date": ["finaldecisiondate", "decisiondate"],
+    "current_stage": ["currentstage", "stage"],
+    "kyc_status": ["kycstatus", "kyc"],
+    "decline_type": ["declinetype", "decline"],
+    "product_des": ["productdes", "productdescription", "productdesc"],
+    "kyc_success_nr": ["kycsuccessnr", "kycsuccess", "kycnr"],
+    "card_type": ["cardtype", "card"],
+    "card_active_status": ["cardactivestatus", "cardactive"],
+    "application_id": ["applicationid", "appid"],
+    "remarks": ["remarks", "remark"]
+}
+
+def clean_header(header: str) -> str:
+    return str(header).strip().lower().replace("_", "").replace(" ", "").replace(".", "").replace("/", "")
+
 
 class ContactUpdate(BaseModel):
     extracted_name: Optional[str] = None
@@ -50,6 +83,7 @@ def get_contacts(
     session_id: Optional[str] = None,
     score: Optional[str] = None,
     query: Optional[str] = None,
+    excel_updated: Optional[bool] = None,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0)
 ):
@@ -63,11 +97,14 @@ def get_contacts(
         statement = statement.where(Contact.session_id == session_id)
     if score:
         statement = statement.where(Contact.lead_score == score)
+    if excel_updated is not None:
+        statement = statement.where(Contact.excel_updated == excel_updated)
     if query:
         statement = statement.where(
             (Contact.extracted_name.contains(query)) | 
             (Contact.email.contains(query)) | 
-            (Contact.mobile.contains(query))
+            (Contact.mobile.contains(query)) |
+            (Contact.arn.contains(query))
         )
     
     statement = statement.offset(offset).limit(limit)
@@ -96,10 +133,37 @@ def get_contacts(
             "owner_company": owner.company_name if owner else None,
             "owner_name": owner.display_name if owner else None,
             "owner_email": owner.email if owner else None,
+            # Excel Matched Fields
+            "creation_date_time": c.creation_date_time,
+            "customer_type": c.customer_type,
+            "state": c.state,
+            "pincode": c.pincode,
+            "lg_code": c.lg_code,
+            "ipa_status": c.ipa_status,
+            "dropoff_reason": c.dropoff_reason,
+            "idcom_status": c.idcom_status,
+            "vkyc_status": c.vkyc_status,
+            "vkyc_consent_date": c.vkyc_consent_date,
+            "vkyc_expiry_date": c.vkyc_expiry_date,
+            "capture_link": c.capture_link,
+            "final_decision": c.final_decision,
+            "final_decision_date": c.final_decision_date,
+            "current_stage": c.current_stage,
+            "kyc_status": c.kyc_status,
+            "decline_type": c.decline_type,
+            "product_des": c.product_des,
+            "kyc_success_nr": c.kyc_success_nr,
+            "card_type": c.card_type,
+            "card_active_status": c.card_active_status,
+            "application_id": c.application_id,
+            "remarks": c.remarks,
+            "excel_updated": c.excel_updated,
+            "excel_updated_at": c.excel_updated_at.isoformat() if c.excel_updated_at else None,
         }
         result.append(item)
     
     return result
+
 
 @router.get("/sessions")
 def get_sessions(
@@ -357,3 +421,143 @@ async def update_contact(
     })
     
     return enriched_contact
+
+@router.post("/upload-excel")
+async def upload_excel(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    # Check extension
+    if not (file.filename.endswith(".xlsx") or file.filename.endswith(".xls") or file.filename.endswith(".csv")):
+        raise HTTPException(status_code=400, detail="Only Excel (.xlsx, .xls) or CSV files are supported.")
+    
+    try:
+        contents = await file.read()
+        if file.filename.endswith(".csv"):
+            df = pd.read_csv(io.BytesIO(contents))
+        else:
+            df = pd.read_excel(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read spreadsheet file: {str(e)}")
+    
+    if df.empty:
+        raise HTTPException(status_code=400, detail="The uploaded spreadsheet is empty.")
+    
+    # Clean and identify headers in the Excel sheet
+    headers = list(df.columns)
+    cleaned_headers_map = {clean_header(h): h for h in headers}
+    
+    # Find the ARN column
+    arn_col_candidates = ["arn", "arnno", "arnnumber", "applicationreferencenumber", "refno", "referenceno"]
+    arn_column_original = None
+    for candidate in arn_col_candidates:
+        if candidate in cleaned_headers_map:
+            arn_column_original = cleaned_headers_map[candidate]
+            break
+            
+    if not arn_column_original:
+        # Fallback: check if any cleaned header contains "arn"
+        for ch, oh in cleaned_headers_map.items():
+            if "arn" in ch:
+                arn_column_original = oh
+                break
+                
+    if not arn_column_original:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not find an 'ARN' or 'Application Reference Number' column in the spreadsheet. "
+                   f"Found columns: {', '.join(headers)}"
+        )
+        
+    # Map other requested columns
+    mapped_columns = {} # db_field_name -> original_excel_column_name
+    for db_field, candidates in FIELD_MAPPINGS.items():
+        for candidate in candidates:
+            if candidate in cleaned_headers_map:
+                mapped_columns[db_field] = cleaned_headers_map[candidate]
+                break
+        if db_field not in mapped_columns:
+            # Fallback: do a substring check
+            for ch, oh in cleaned_headers_map.items():
+                if ch == clean_header(arn_column_original):
+                    continue
+                for cand in candidates:
+                    if cand in ch or ch in cand:
+                        mapped_columns[db_field] = oh
+                        break
+                if db_field in mapped_columns:
+                    break
+
+    # Perform matching and updates
+    total_rows = len(df)
+    matched_count = 0
+    unmatched_arns = []
+    
+    for idx, row in df.iterrows():
+        arn_val = row[arn_column_original]
+        if pd.isna(arn_val):
+            continue
+            
+        arn_str = str(arn_val).strip()
+        if not arn_str or arn_str.lower() in ["nan", "none", "absent", ""]:
+            continue
+            
+        # Match lead
+        statement = select(Contact).where(Contact.arn == arn_str)
+        if current_user.role != "superadmin":
+            statement = statement.where(Contact.user_id == current_user.id)
+            
+        lead = db.exec(statement).first()
+        
+        if lead:
+            # Update mapped details
+            for db_field, excel_col in mapped_columns.items():
+                val = row[excel_col]
+                # Clean value
+                if pd.isna(val):
+                    setattr(lead, db_field, None)
+                else:
+                    if isinstance(val, pd.Timestamp):
+                        val_str = val.strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        val_str = str(val).strip()
+                    
+                    if val_str.lower() in ["nan", "none", "null"]:
+                        setattr(lead, db_field, None)
+                    else:
+                        setattr(lead, db_field, val_str)
+            
+            # Set update tracker
+            lead.excel_updated = True
+            lead.excel_updated_at = datetime.utcnow()
+            
+            db.add(lead)
+            matched_count += 1
+        else:
+            unmatched_arns.append(arn_str)
+            
+    db.commit()
+    
+    # Notify dashboard via WebSocket
+    try:
+        from core.ws import manager
+        await manager.broadcast({
+            "event": "lead_updated",
+            "data": {
+                "action": "excel_upload",
+                "matched_count": matched_count,
+                "total_rows": total_rows
+            }
+        })
+    except Exception as ws_err:
+        print(f"WebSocket notification error: {ws_err}")
+        
+    return {
+        "status": "success",
+        "total_rows": total_rows,
+        "matched_count": matched_count,
+        "unmatched_arns": unmatched_arns[:100],
+        "unmatched_count": len(unmatched_arns),
+        "mapped_columns": mapped_columns
+    }

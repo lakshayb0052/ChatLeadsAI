@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Download, User, Building2, Calendar,
   Zap, Phone, Mail, ShieldCheck, Trash2, MessageCircle, Server,
-  Wifi, ChevronRight, Briefcase, Hash, Filter, Edit
+  Wifi, ChevronRight, Briefcase, Hash, Filter, Edit, Upload,
+  Copy, Check, ChevronDown, ChevronUp, FileSpreadsheet
 } from 'lucide-react';
 import { useWebSocket } from '../../hooks/useWebSocket';
 
@@ -26,6 +27,32 @@ interface Lead {
   owner_company: string | null;
   owner_name: string | null;
   owner_email: string | null;
+  // Excel Matched Fields
+  creation_date_time?: string | null;
+  customer_type?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  lg_code?: string | null;
+  ipa_status?: string | null;
+  dropoff_reason?: string | null;
+  idcom_status?: string | null;
+  vkyc_status?: string | null;
+  vkyc_consent_date?: string | null;
+  vkyc_expiry_date?: string | null;
+  capture_link?: string | null;
+  final_decision?: string | null;
+  final_decision_date?: string | null;
+  current_stage?: string | null;
+  kyc_status?: string | null;
+  decline_type?: string | null;
+  product_des?: string | null;
+  kyc_success_nr?: string | null;
+  card_type?: string | null;
+  card_active_status?: string | null;
+  application_id?: string | null;
+  remarks?: string | null;
+  excel_updated?: boolean;
+  excel_updated_at?: string | null;
 }
 
 interface SessionInfo {
@@ -54,6 +81,54 @@ export default function LeadsPage() {
   const [wipeSession, setWipeSession] = useState('');
   const [wipeCompany, setWipeCompany] = useState('');
   const [wipeScore, setWipeScore] = useState('');
+
+  // Excel Upload States
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<any>(null);
+  const [copiedArns, setCopiedArns] = useState<{[key: string]: boolean}>({});
+
+  const handleUploadExcel = async () => {
+    if (!uploadFile) return;
+    setUploading(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+
+      const headers: HeadersInit = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${apiUrl}/contacts/upload-excel`, {
+        method: 'POST',
+        headers,
+        body: formData
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Upload failed');
+      }
+
+      const data = await res.json();
+      setUploadResult(data);
+      fetchLeads(); // Refresh grid
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Error uploading file. Please verify columns.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedArns(prev => ({ ...prev, [id]: true }));
+    setTimeout(() => {
+      setCopiedArns(prev => ({ ...prev, [id]: false }));
+    }, 2000);
+  };
 
   // Edit states
   const [editLead, setEditLead] = useState<Lead | null>(null);
@@ -506,6 +581,151 @@ export default function LeadsPage() {
             </motion.div>
           </motion.div>
         )}
+
+        {/* ── Excel Upload Modal ── */}
+        {showUploadModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-end md:items-center justify-center p-0 md:p-6 overflow-y-auto"
+            style={{ background: 'rgba(17,11,41,0.6)', backdropFilter: 'blur(16px)' }}>
+            <motion.div 
+              initial={{ y: "100%", scale: 0.9 }}
+              animate={{ y: 0, scale: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="w-full md:max-w-xl rounded-t-[2.5rem] md:rounded-[2.5rem] p-6 md:p-10 space-y-6 max-h-[90vh] md:max-h-[calc(100vh-3rem)] overflow-y-auto custom-scrollbar shadow-2xl"
+              style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-bright)', boxShadow: '0 0 40px rgba(109, 40, 217, 0.15)' }}>
+              
+              <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl flex items-center justify-center mx-auto"
+                style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-glow)' }}>
+                <FileSpreadsheet size={24} className="md:w-7 md:h-7 text-[var(--purple-mid)]" />
+              </div>
+
+              {!uploadResult ? (
+                <>
+                  <div className="text-center">
+                    <h3 className="text-xl md:text-2xl font-black text-[var(--text-primary)]">Import Lead Intelligence</h3>
+                    <p className="text-xs md:text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+                      Upload an Excel or CSV file to match leads by their **ARN** and sync outcome metrics.
+                    </p>
+                  </div>
+
+                  {/* Drag drop zone */}
+                  <label className="flex flex-col items-center justify-center border-2 border-dashed rounded-3xl p-8 cursor-pointer transition-all hover:bg-opacity-50"
+                    style={{ borderColor: 'var(--border-bright)', background: 'var(--bg-hover)' }}>
+                    <input 
+                      type="file" 
+                      accept=".xlsx,.xls,.csv" 
+                      className="hidden" 
+                      onChange={e => setUploadFile(e.target.files?.[0] || null)}
+                    />
+                    <Upload size={28} className="text-[var(--purple-mid)] mb-3" />
+                    {uploadFile ? (
+                      <div className="text-center">
+                        <p className="text-xs font-black text-[var(--text-primary)]">{uploadFile.name}</p>
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] mt-1">
+                          {(uploadFile.size / 1024).toFixed(1)} KB • {uploadFile.name.split('.').pop()?.toUpperCase()}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <p className="text-xs font-black text-[var(--text-primary)]">Drag & drop or click to browse</p>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-ghost)] mt-1">
+                          Supports XLSX, XLS, and CSV
+                        </p>
+                      </div>
+                    )}
+                  </label>
+
+                  <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                    <button 
+                      onClick={() => setShowUploadModal(false)}
+                      disabled={uploading}
+                      className="flex-1 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-opacity-80 transition-all"
+                      style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={handleUploadExcel}
+                      disabled={!uploadFile || uploading}
+                      className="btn-primary flex-1 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                      {uploading ? (
+                        <motion.div 
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                          className="w-4 h-4 rounded-full border-2 border-white border-t-transparent"
+                        />
+                      ) : 'Upload & Match'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-center space-y-2">
+                    <h3 className="text-xl md:text-2xl font-black text-emerald-600 flex items-center justify-center gap-2">
+                      <Check size={24} className="stroke-[3]" /> Match Sync Complete
+                    </h3>
+                    <p className="text-xs md:text-sm" style={{ color: 'var(--text-secondary)' }}>
+                      Processed **{uploadResult.total_rows}** spreadsheet rows.
+                    </p>
+                  </div>
+
+                  {/* Summary counts */}
+                  <div className="grid grid-cols-2 gap-4 p-4 rounded-2xl" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)' }}>
+                    <div className="text-center border-r" style={{ borderColor: 'var(--border-subtle)' }}>
+                      <p className="text-2xl font-black text-emerald-600">{uploadResult.matched_count}</p>
+                      <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)] mt-1">Matched & Updated</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-black text-amber-500">{uploadResult.unmatched_count}</p>
+                      <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)] mt-1">Unmatched ARNs</p>
+                    </div>
+                  </div>
+
+                  {/* Unmatched list if any */}
+                  {uploadResult.unmatched_arns?.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-amber-500">Unmatched ARNs List (First 100)</p>
+                      <div className="max-h-32 overflow-y-auto p-3 rounded-xl space-y-1.5 custom-scrollbar border"
+                        style={{ background: 'var(--bg-deep)', borderColor: 'var(--border-subtle)' }}>
+                        {uploadResult.unmatched_arns.map((arn: string, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center text-xs font-bold p-1 hover:bg-opacity-50 hover:bg-[var(--bg-hover)] rounded-md">
+                            <span style={{ color: 'var(--text-secondary)' }}>{arn}</span>
+                            <button 
+                              onClick={() => copyToClipboard(arn, `arn-${idx}`)}
+                              className="text-[9px] font-black uppercase tracking-widest text-[var(--purple-mid)] hover:underline flex items-center gap-1">
+                              {copiedArns[`arn-${idx}`] ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
+                              {copiedArns[`arn-${idx}`] ? 'Copied' : 'Copy'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                    <button 
+                      onClick={() => setShowUploadModal(false)}
+                      className="flex-1 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-opacity-80 transition-all"
+                      style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
+                      Done
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setShowUploadModal(false);
+                        window.location.href = '/dashboard/leads-dashboard';
+                      }}
+                      className="btn-primary flex-1 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2">
+                      Go to Analytics Dashboard
+                    </button>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* ── Page Header ── */}
@@ -544,6 +764,20 @@ export default function LeadsPage() {
               <Trash2 size={14} className="md:w-4 md:h-4 group-hover:rotate-12 transition-transform" /> Wipe All
             </motion.button>
           )}
+          <motion.button 
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              setUploadFile(null);
+              setUploadResult(null);
+              setShowUploadModal(true);
+            }}
+            className="flex-1 md:flex-none px-4 md:px-6 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-widest flex justify-center items-center gap-2 transition-all"
+            style={{ background: 'rgba(109,40,217,0.04)', border: '1px solid rgba(109,40,217,0.15)', color: 'var(--purple-mid)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(109,40,217,0.08)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(109,40,217,0.04)'; }}>
+            <Upload size={14} className="md:w-4 md:h-4" /> Import Excel
+          </motion.button>
           <motion.button 
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -736,6 +970,7 @@ function LeadCard({ lead, index, isSuperAdmin, onDelete, onEdit }: {
 }) {
   const isHot = lead.lead_score === 'Hot';
   const isWarm = lead.lead_score === 'Warm';
+  const [showExcelDetails, setShowExcelDetails] = useState(false);
 
   const accentColor = isHot ? '#f59e0b' : isWarm ? '#2563eb' : '#6b7280';
   const accentBg = isHot
@@ -845,8 +1080,13 @@ function LeadCard({ lead, index, isSuperAdmin, onDelete, onEdit }: {
                   style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)' }}>
                   <Hash size={12} className="md:w-3.5 md:h-3.5" />
                 </div>
-                <span className="text-xs md:text-sm font-black truncate" style={{ color: 'var(--purple-mid)' }}>
+                <span className="text-xs md:text-sm font-black truncate flex items-center gap-1.5" style={{ color: 'var(--purple-mid)' }}>
                   ARN: {lead.arn}
+                  {lead.excel_updated && (
+                    <span className="text-[8px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-600 px-1.5 py-0.5 rounded-full border border-emerald-500/20">
+                      Excel Synced
+                    </span>
+                  )}
                 </span>
               </div>
             )}
@@ -892,6 +1132,82 @@ function LeadCard({ lead, index, isSuperAdmin, onDelete, onEdit }: {
             </motion.button>
           </div>
         </div>
+
+        {/* Collapsible Excel Details Accordion */}
+        {lead.excel_updated && (
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+            <button 
+              onClick={() => setShowExcelDetails(!showExcelDetails)}
+              className="flex items-center justify-between w-full text-left font-black text-[10px] md:text-xs uppercase tracking-widest text-[var(--purple-mid)] hover:underline">
+              <span>Matched Outcome Parameters</span>
+              <span className="flex items-center gap-1">
+                {showExcelDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </span>
+            </button>
+            
+            <AnimatePresence>
+              {showExcelDetails && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden mt-3"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs p-4 rounded-2xl"
+                    style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)' }}>
+                    
+                    {/* Verification Log */}
+                    <div className="space-y-1.5">
+                      <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Verification Log</p>
+                      <p className="font-bold text-[var(--text-secondary)]">KYC Status: <span className="font-black text-[var(--text-primary)]">{lead.kyc_status || 'N/A'}</span></p>
+                      <p className="font-bold text-[var(--text-secondary)]">VKYC Status: <span className="font-black text-[var(--text-primary)]">{lead.vkyc_status || 'N/A'}</span></p>
+                      <p className="font-bold text-[var(--text-secondary)]">VKYC Expiry: <span className="font-black text-[var(--text-primary)]">{lead.vkyc_expiry_date || 'N/A'}</span></p>
+                      <p className="font-bold text-[var(--text-secondary)]">KYC Success/NR: <span className="font-black text-[var(--text-primary)]">{lead.kyc_success_nr || 'N/A'}</span></p>
+                    </div>
+
+                    {/* Application Specs */}
+                    <div className="space-y-1.5">
+                      <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Application Specs</p>
+                      <p className="font-bold text-[var(--text-secondary)]">App ID: <span className="font-black text-[var(--text-primary)]">{lead.application_id || 'N/A'}</span></p>
+                      <p className="font-bold text-[var(--text-secondary)]">Product: <span className="font-black text-[var(--text-primary)]">{lead.product_des || 'N/A'}</span></p>
+                      <p className="font-bold text-[var(--text-secondary)]">Card Type: <span className="font-black text-[var(--text-primary)]">{lead.card_type || 'N/A'}</span></p>
+                      <p className="font-bold text-[var(--text-secondary)]">Card Active: <span className="font-black text-[var(--text-primary)]">{lead.card_active_status || 'N/A'}</span></p>
+                    </div>
+
+                    {/* Outcome Details */}
+                    <div className="space-y-1.5">
+                      <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Outcome Details</p>
+                      <p className="font-bold text-[var(--text-secondary)]">Final Decision: <span className="font-black text-[var(--text-primary)]">{lead.final_decision || 'N/A'}</span></p>
+                      <p className="font-bold text-[var(--text-secondary)]">Decision Date: <span className="font-black text-[var(--text-primary)]">{lead.final_decision_date || 'N/A'}</span></p>
+                      <p className="font-bold text-[var(--text-secondary)]">Stage: <span className="font-black text-[var(--text-primary)]">{lead.current_stage || 'N/A'}</span></p>
+                      <p className="font-bold text-[var(--text-secondary)]">Decline Type: <span className="font-black text-[var(--text-primary)]">{lead.decline_type || 'N/A'}</span></p>
+                    </div>
+
+                    {/* Location & Capture */}
+                    <div className="space-y-1.5">
+                      <p className="text-[9px] font-black uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Location & Capture</p>
+                      <p className="font-bold text-[var(--text-secondary)]">State: <span className="font-black text-[var(--text-primary)]">{lead.state || 'N/A'}</span></p>
+                      <p className="font-bold text-[var(--text-secondary)]">Pincode: <span className="font-black text-[var(--text-primary)]">{lead.pincode || 'N/A'}</span></p>
+                      <p className="font-bold text-[var(--text-secondary)]">LG Code: <span className="font-black text-[var(--text-primary)]">{lead.lg_code || 'N/A'}</span></p>
+                      <p className="font-bold text-[var(--text-secondary)]">Capture Link: {lead.capture_link ? (
+                        <a href={lead.capture_link} target="_blank" rel="noreferrer" className="text-[var(--purple-mid)] hover:underline font-black">Open Link</a>
+                      ) : 'N/A'}</p>
+                    </div>
+
+                    {/* Remarks/Dropoff */}
+                    {(lead.remarks || lead.dropoff_reason || lead.customer_type) && (
+                      <div className="sm:col-span-2 lg:col-span-4 mt-1.5 pt-2 border-t space-y-1" style={{ borderColor: 'var(--border-subtle)' }}>
+                        {lead.customer_type && <p className="font-bold text-[var(--text-secondary)]">Customer Type: <span className="font-black text-[var(--text-primary)]">{lead.customer_type}</span></p>}
+                        {lead.dropoff_reason && <p className="font-bold text-[var(--text-secondary)]">Dropoff Reason: <span className="font-black text-[var(--text-primary)]">{lead.dropoff_reason}</span></p>}
+                        {lead.remarks && <p className="font-bold text-[var(--text-secondary)]">Remarks: <span className="font-medium text-[var(--text-primary)] italic">"{lead.remarks}"</span></p>}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="mt-4 md:mt-6 pt-4 md:pt-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4"

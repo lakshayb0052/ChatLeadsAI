@@ -14,7 +14,8 @@ import {
   Activity,
   Menu,
   X,
-  Briefcase
+  Briefcase,
+  BarChart2
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -87,6 +88,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navItems = [
     { href: '/dashboard', label: 'Overview', icon: <LayoutDashboard size={20} /> },
     { href: '/dashboard/leads', label: 'Leads', icon: <Users size={20} /> },
+    { href: '/dashboard/leads-dashboard', label: 'Leads Dashboard', icon: <BarChart2 size={20} /> },
     { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: <MessageSquare size={20} /> },
     ...(role === 'superadmin' ? [
       { href: '/dashboard/users', label: 'Companies', icon: <Briefcase size={20} /> }
