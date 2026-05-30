@@ -561,3 +561,100 @@ async def upload_excel(
         "unmatched_count": len(unmatched_arns),
         "mapped_columns": mapped_columns
     }
+
+@router.get("/export-matched")
+async def export_matched_contacts(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_user_from_token_or_query)
+):
+    import pandas as pd
+    import io
+    from fastapi.responses import StreamingResponse
+    from datetime import datetime
+    
+    statement = select(Contact).where(Contact.excel_updated == True).order_by(Contact.created_at.desc())
+    if current_user.role != "superadmin":
+        statement = statement.where(Contact.user_id == current_user.id)
+        
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            statement = statement.where(Contact.created_at >= start_dt)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date format. Use YYYY-MM-DD.")
+            
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            statement = statement.where(Contact.created_at <= end_dt)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD.")
+            
+    contacts = db.exec(statement).all()
+    
+    if not contacts:
+        raise HTTPException(status_code=404, detail="No matched leads found in the selected date range.")
+        
+    # Prepare data
+    data = []
+    for c in contacts:
+        owner = db.get(User, c.user_id)
+        data.append({
+            "ARN Ref": c.arn or "",
+            "Name": c.extracted_name or "",
+            "Mobile": c.mobile or "",
+            "Email": c.email or "",
+            "Session ID": c.session_id or "",
+            "Owner Company": owner.company_name if owner else "",
+            "Lead Score": c.lead_score or "",
+            "Confidence": f"{c.confidence * 100:.1f}%" if c.confidence else "",
+            "Source Message": c.source_message or "",
+            "Source Type": c.source_type or "",
+            "WhatsApp JID": c.wa_jid or "",
+            "WhatsApp Created At": c.created_at.strftime("%Y-%m-%d %H:%M:%S") if c.created_at else "",
+            
+            # Excel Matched Fields
+            "Creation DateTime (Excel)": c.creation_date_time or "",
+            "Customer Type": c.customer_type or "",
+            "State": c.state or "",
+            "Pincode": c.pincode or "",
+            "LG Code": c.lg_code or "",
+            "IPA Status": c.ipa_status or "",
+            "DropOff Reason": c.dropoff_reason or "",
+            "Idcom Status": c.idcom_status or "",
+            "VKYC Status": c.vkyc_status or "",
+            "VKYC Consent Date": c.vkyc_consent_date or "",
+            "VKYC Expiry Date": c.vkyc_expiry_date or "",
+            "Capture Link": c.capture_link or "",
+            "Final Decision": c.final_decision or "",
+            "Final Decision Date": c.final_decision_date or "",
+            "Current Stage": c.current_stage or "",
+            "KYC Status": c.kyc_status or "",
+            "Decline Type": c.decline_type or "",
+            "Product Description": c.product_des or "",
+            "KYC Success/NR": c.kyc_success_nr or "",
+            "Card Type": c.card_type or "",
+            "Card Active Status": c.card_active_status or "",
+            "Application ID": c.application_id or "",
+            "Remarks": c.remarks or "",
+            "Excel Match Synced At": c.excel_updated_at.strftime("%Y-%m-%d %H:%M:%S") if c.excel_updated_at else ""
+        })
+        
+    df = pd.DataFrame(data)
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Matched Leads')
+        
+    output.seek(0)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"chatleads_matched_export_{timestamp}.xlsx"
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

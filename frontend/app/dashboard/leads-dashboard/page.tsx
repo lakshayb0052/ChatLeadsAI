@@ -72,6 +72,11 @@ export default function LeadsDashboard() {
   const [filterScore, setFilterScore] = useState('');
   const [filterSession, setFilterSession] = useState('');
   
+  // Export Date Range Filters
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [role, setRole] = useState('user');
+  
   // Selected Lead Drawer
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -101,6 +106,9 @@ export default function LeadsDashboard() {
   };
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setRole(localStorage.getItem('role') || 'user');
+    }
     fetchMatchedLeads();
   }, []);
 
@@ -115,6 +123,8 @@ export default function LeadsDashboard() {
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
+
+  const isSuperAdmin = role === 'superadmin';
 
   // ── Derived Unique Option Lists for Select Elements ──
   const uniqueStates = Array.from(new Set(leads.map(l => l.state).filter(Boolean))) as string[];
@@ -246,11 +256,22 @@ export default function LeadsDashboard() {
     setFilterCardActive('');
     setFilterScore('');
     setFilterSession('');
+    setStartDate('');
+    setEndDate('');
   };
 
   const isFiltersActive = searchTerm || filterState || filterDecision || filterKyc || 
                           filterProduct || filterCustomerType || filterCardActive || 
-                          filterScore || filterSession;
+                          filterScore || filterSession || startDate || endDate;
+
+  const handleExportMatched = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    if (token) params.append('token', token);
+    window.location.href = `${apiUrl}/contacts/export-matched?${params}`;
+  };
 
   return (
     <div className="space-y-6 md:space-y-8 pb-20">
@@ -506,6 +527,57 @@ export default function LeadsDashboard() {
                   {uniqueScores.map(sc => <option key={sc} value={sc}>{sc === 'Hot' ? '🔥 Hot' : sc === 'Warm' ? '⚡ Warm' : '❄️ Cold'}</option>)}
                 </select>
               </div>
+
+            </div>
+
+            {/* ── Export Matched Leads Area ── */}
+            <div className="border-t pt-5 mt-4 flex flex-col md:flex-row md:items-end justify-between gap-4"
+              style={{ borderColor: 'var(--border-subtle)' }}>
+              
+              <div className="flex flex-col sm:flex-row gap-3 items-center flex-1">
+                
+                {/* Export Start Date */}
+                <div className="w-full sm:w-auto flex-1 space-y-1">
+                  <span className="block text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Export Start Date</span>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-ghost)] pointer-events-none" />
+                    <input 
+                      type="date" 
+                      value={startDate} 
+                      onChange={e => setStartDate(e.target.value)}
+                      className="input-dark w-full pl-9 pr-3 py-2.5 rounded-lg font-bold text-xs cursor-pointer outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Export End Date */}
+                <div className="w-full sm:w-auto flex-1 space-y-1">
+                  <span className="block text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Export End Date</span>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-ghost)] pointer-events-none" />
+                    <input 
+                      type="date" 
+                      value={endDate} 
+                      onChange={e => setEndDate(e.target.value)}
+                      className="input-dark w-full pl-9 pr-3 py-2.5 rounded-lg font-bold text-xs cursor-pointer outline-none"
+                    />
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Export Trigger Button */}
+              <button 
+                onClick={handleExportMatched}
+                className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg active:scale-95 text-white cursor-pointer"
+                style={{ 
+                  background: 'linear-gradient(135deg, var(--purple-mid), #3b82f6)', 
+                  boxShadow: '0 4px 20px rgba(99, 102, 241, 0.25)',
+                  border: '1px solid rgba(255,255,255,0.1)'
+                }}
+              >
+                <ClipboardList size={14} /> Export Matched Leads (XLSX)
+              </button>
 
             </div>
 
@@ -835,9 +907,14 @@ export default function LeadsDashboard() {
                         {/* Lead Name and Product */}
                         <div>
                           <h4 className="text-base font-black text-[var(--text-primary)] truncate">{lead.extracted_name || 'Anonymous Lead'}</h4>
+                          {isSuperAdmin && (
+                            <p className="text-[10px] font-black text-blue-500 mt-1 truncate flex items-center gap-1.5 bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10 w-fit">
+                              <Building2 size={10} className="text-blue-400 shrink-0" /> {lead.owner_company || 'Independent'}
+                            </p>
+                          )}
                           {lead.product_des && (
-                            <p className="text-[10px] font-bold text-[var(--text-secondary)] mt-0.5 truncate flex items-center gap-1.5">
-                              <CreditCard size={10} className="text-indigo-400" /> {lead.product_des}
+                            <p className="text-[10px] font-bold text-[var(--text-secondary)] mt-1.5 truncate flex items-center gap-1.5">
+                              <CreditCard size={10} className="text-indigo-400 shrink-0" /> {lead.product_des}
                             </p>
                           )}
                         </div>
