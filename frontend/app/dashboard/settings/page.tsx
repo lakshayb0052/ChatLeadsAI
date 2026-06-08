@@ -85,13 +85,14 @@ function SectionCard({ icon, title, subtitle, children }: { icon: React.ReactNod
 const TABS = [
   { id: 'ai', label: 'AI Engine', icon: <Cpu size={16} className="md:w-[18px] md:h-[18px]" /> },
   { id: 'database', label: 'Database', icon: <Database size={16} className="md:w-[18px] md:h-[18px]" /> },
-  { id: 'agents', label: 'Location Agents', icon: <Users size={16} className="md:w-[18px] md:h-[18px]" /> },
+  { id: 'agents', label: 'Agents Location', icon: <Users size={16} className="md:w-[18px] md:h-[18px]" /> },
   { id: 'notifications', label: 'Notifications', icon: <Bell size={16} className="md:w-[18px] md:h-[18px]" /> },
   { id: 'api', label: 'API & Webhooks', icon: <Globe size={16} className="md:w-[18px] md:h-[18px]" /> },
   { id: 'account', label: 'Account', icon: <User size={16} className="md:w-[18px] md:h-[18px]" /> },
 ];
 
 export default function SettingsPage() {
+  const [role, setRole] = useState('user');
   const [activeTab, setActiveTab] = useState('ai');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -130,6 +131,13 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedRole = localStorage.getItem('role') || 'user';
+      setRole(storedRole);
+      if (storedRole !== 'superadmin') {
+        setActiveTab('agents');
+      }
+    }
     fetchAgents();
   }, []);
 
@@ -227,7 +235,7 @@ export default function SettingsPage() {
       <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6 md:gap-8">
         {/* Sidebar Tabs */}
         <div className="glass-card rounded-2xl md:rounded-3xl p-3 md:p-4 h-fit flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible custom-scrollbar space-x-2 lg:space-x-0 lg:space-y-1">
-          {TABS.map(tab => (
+          {TABS.filter(tab => role === 'superadmin' || tab.id === 'agents').map(tab => (
             <div key={tab.id} className="min-w-fit lg:min-w-0 flex-1 lg:flex-none">
               <SettingsTab
                 icon={tab.icon}
@@ -356,11 +364,11 @@ export default function SettingsPage() {
 
             {activeTab === 'agents' && (
               <motion.div key="agents" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                <SectionCard icon={<Users size={20} className="md:w-[22px] md:h-[22px]" />} title="Location Agents & Staff" subtitle="Manage multiple agents and locations linked by LG codes">
+                <SectionCard icon={<Users size={20} className="md:w-[22px] md:h-[22px]" />} title="Agents Location & Staff" subtitle="Manage multiple agents and locations linked by LG codes">
                   
                   {/* Form to Add New Agent */}
                   <form onSubmit={handleAddAgent} className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ background: 'var(--bg-deep)', borderColor: 'var(--border-subtle)' }}>
-                    <p className="text-xs font-black uppercase tracking-widest text-[var(--purple-mid)]">Add New Location Agent</p>
+                    <p className="text-xs font-black uppercase tracking-widest text-[var(--purple-mid)]">Add New Agents Location</p>
                     
                     {agentError && (
                       <div className="p-3.5 rounded-xl text-xs font-black uppercase tracking-wider bg-red-500/10 text-red-500 border border-red-500/20">
@@ -440,7 +448,7 @@ export default function SettingsPage() {
                     </div>
 
                     <button type="submit" className="w-full flex items-center justify-center gap-2 px-4 py-2.5 btn-primary rounded-xl font-black text-xs uppercase tracking-widest transition-all cursor-pointer">
-                      <Plus size={14} /> Add Location Agent
+                      <Plus size={14} /> Add Agents Location
                     </button>
                   </form>
 
@@ -528,27 +536,29 @@ export default function SettingsPage() {
           </AnimatePresence>
 
           {/* Save Bar */}
-          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 md:gap-3 pt-2 md:pt-4">
-            <button className="w-full sm:w-auto px-6 md:px-8 py-3.5 md:py-4 rounded-xl md:rounded-2xl font-black text-xs md:text-sm transition-all"
-              style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-muted)'; }}>
-              Discard
-            </button>
-            <motion.button 
-              whileHover={{ scale: saving ? 1 : 1.02 }}
-              whileTap={{ scale: saving ? 1 : 0.98 }}
-              onClick={handleSave} disabled={saving}
-              className="btn-primary w-full sm:w-auto px-8 md:px-10 py-3.5 md:py-4 rounded-xl md:rounded-2xl font-black text-xs md:text-sm flex items-center justify-center gap-2 disabled:opacity-70">
-              {saved ? (
-                <><CheckCircle2 size={14} className="md:w-4 md:h-4" /> Saved!</>
-              ) : saving ? (
-                <><Activity size={14} className="md:w-4 md:h-4 animate-spin" /> Saving...</>
-              ) : (
-                <><Save size={14} className="md:w-4 md:h-4" /> Save Preferences</>
-              )}
-            </motion.button>
-          </div>
+          {role === 'superadmin' && (
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 md:gap-3 pt-2 md:pt-4">
+              <button className="w-full sm:w-auto px-6 md:px-8 py-3.5 md:py-4 rounded-xl md:rounded-2xl font-black text-xs md:text-sm transition-all"
+                style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-muted)'; }}>
+                Discard
+              </button>
+              <motion.button 
+                whileHover={{ scale: saving ? 1 : 1.02 }}
+                whileTap={{ scale: saving ? 1 : 0.98 }}
+                onClick={handleSave} disabled={saving}
+                className="btn-primary w-full sm:w-auto px-8 md:px-10 py-3.5 md:py-4 rounded-xl md:rounded-2xl font-black text-xs md:text-sm flex items-center justify-center gap-2 disabled:opacity-70">
+                {saved ? (
+                  <><CheckCircle2 size={14} className="md:w-4 md:h-4" /> Saved!</>
+                ) : saving ? (
+                  <><Activity size={14} className="md:w-4 md:h-4 animate-spin" /> Saving...</>
+                ) : (
+                  <><Save size={14} className="md:w-4 md:h-4" /> Save Preferences</>
+                )}
+              </motion.button>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
