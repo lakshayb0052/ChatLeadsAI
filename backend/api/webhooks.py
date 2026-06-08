@@ -353,7 +353,7 @@ async def get_session_leads(session_id: str, db: Session = Depends(get_session))
                 "mobile": lead.mobile,
                 "email": lead.email,
                 "source_message": lead.source_message[:100] if lead.source_message else None,
-                "created_at": lead.created_at.isoformat() if lead.created_at else None,
+                "created_at": lead.created_at.isoformat() + "Z" if lead.created_at else None,
                 "sender_jid": lead.wa_jid
             }
             for lead in leads

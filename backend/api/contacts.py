@@ -202,7 +202,7 @@ def get_contacts(
             "session_id": c.session_id,
             "wa_jid": c.wa_jid,
             "group_jid": c.group_jid,
-            "created_at": c.created_at,
+            "created_at": c.created_at.isoformat() + "Z" if c.created_at else None,
             # Enriched company/owner info
             "owner_company": owner.company_name if owner else None,
             "owner_name": owner.display_name if owner else None,
@@ -232,7 +232,7 @@ def get_contacts(
             "application_id": c.application_id,
             "remarks": c.remarks,
             "excel_updated": c.excel_updated,
-            "excel_updated_at": c.excel_updated_at.isoformat() if c.excel_updated_at else None,
+            "excel_updated_at": c.excel_updated_at.isoformat() + "Z" if c.excel_updated_at else None,
             # Location & Agent Details
             "executive_name": c.executive_name,
             "executive_code": c.executive_code,
@@ -519,9 +519,9 @@ async def update_contact(
     
     owner = db.get(User, contact.user_id)
     enriched_contact = contact.dict()
-    enriched_contact["created_at"] = contact.created_at.isoformat() if hasattr(contact.created_at, 'isoformat') else str(contact.created_at)
+    enriched_contact["created_at"] = (contact.created_at.isoformat() + "Z") if contact.created_at else None
     if contact.excel_updated_at:
-        enriched_contact["excel_updated_at"] = contact.excel_updated_at.isoformat() if hasattr(contact.excel_updated_at, 'isoformat') else str(contact.excel_updated_at)
+        enriched_contact["excel_updated_at"] = (contact.excel_updated_at.isoformat() + "Z") if contact.excel_updated_at else None
     enriched_contact["owner_company"] = owner.company_name if owner else None
     enriched_contact["owner_name"] = owner.display_name if owner else None
     enriched_contact["owner_email"] = owner.email if owner else None
@@ -892,7 +892,7 @@ async def get_bulk_contacts(
             "lead_score": bc.lead_score,
             "source_message": bc.source_message,
             "status": bc.status,
-            "created_at": bc.created_at,
+            "created_at": bc.created_at.isoformat() + "Z" if bc.created_at else None,
             "owner_company": owner.company_name if owner else None
         })
         

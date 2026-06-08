@@ -196,7 +196,7 @@ async def list_sessions(
             "session_id": s.session_id,
             "status": s.status,
             "qr_code": s.qr_code,
-            "last_seen": s.last_seen,
+            "last_seen": s.last_seen.isoformat() + "Z" if s.last_seen else None,
             "user_id": s.user_id,
             "owner_company": owner.company_name if owner else None,
             "owner_name": owner.display_name if owner else None,

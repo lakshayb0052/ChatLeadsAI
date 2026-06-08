@@ -64,7 +64,7 @@ async def get_overview_stats(
             "id": l.id,
             "name": l.extracted_name or "Anonymous",
             "score": l.lead_score or "Warm",
-            "time": l.created_at.isoformat(),
+            "time": l.created_at.isoformat() + "Z" if l.created_at else None,
             "session": l.session_id or "fleet",
             "message": l.source_message
         } for l in recent_leads]
