@@ -117,7 +117,7 @@ def get_contacts(
     score: Optional[str] = None,
     query: Optional[str] = None,
     excel_updated: Optional[bool] = None,
-    limit: int = Query(100, ge=1, le=1000),
+    limit: Optional[int] = Query(None, ge=1),
     offset: int = Query(0, ge=0)
 ):
     from sqlmodel import text
@@ -178,7 +178,10 @@ def get_contacts(
             (Contact.arn.contains(query))
         )
     
-    statement = statement.offset(offset).limit(limit)
+    if limit is not None:
+        statement = statement.limit(limit)
+    if offset > 0:
+        statement = statement.offset(offset)
     contacts = db.exec(statement).all()
     
     # Enrich each contact with owner's company info
@@ -846,7 +849,7 @@ async def get_bulk_contacts(
     session_id: Optional[str] = None,
     status: str = Query("pending"),  # pending, added, all
     query: Optional[str] = None,
-    limit: int = Query(100, ge=1, le=1000),
+    limit: Optional[int] = Query(None, ge=1),
     offset: int = Query(0, ge=0)
 ):
     statement = select(BulkContact).order_by(BulkContact.created_at.desc())
@@ -867,7 +870,10 @@ async def get_bulk_contacts(
             (BulkContact.arn.contains(query))
         )
         
-    statement = statement.offset(offset).limit(limit)
+    if limit is not None:
+        statement = statement.limit(limit)
+    if offset > 0:
+        statement = statement.offset(offset)
     bulk_contacts = db.exec(statement).all()
     
     result = []

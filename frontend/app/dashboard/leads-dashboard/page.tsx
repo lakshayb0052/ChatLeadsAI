@@ -199,7 +199,7 @@ export default function LeadsDashboard() {
       const headers: HeadersInit = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`${apiUrl}/contacts/?excel_updated=true&limit=1000`, { headers });
+      const res = await fetch(`${apiUrl}/contacts/?excel_updated=true`, { headers });
       if (!res.ok) throw new Error();
       const data: Lead[] = await res.json();
       setLeads(data);
