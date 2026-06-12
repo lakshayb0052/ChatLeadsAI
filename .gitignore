@@ -55,12 +55,11 @@ services/whatsapp/auth_info/
 services/whatsapp/media/
 
 # Git Remotes and Push Commands
-# Abhi:
-# git remote add origin https://github.com/gargabhi999-hub/ChatLeadsAI.git
-# git branch -M main
+#
+# Configured origin to push to both repositories simultaneously:
+# Abhi: https://github.com/gargabhi999-hub/ChatLeadsAI.git
+# Lakshay: https://github.com/lakshayb0052/ChatLeadsAI.git
+#
+# To push the project to both repositories, run:
 # git push -u origin main
 
-# Lakshay:
-# git remote add origin https://github.com/lakshayb0052/ChatLeadsAI.git
-# git branch -M main
-# git push -u origin main
