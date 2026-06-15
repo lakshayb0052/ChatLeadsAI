@@ -31,24 +31,24 @@ class Contact(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id")
     wa_jid: str = Field(index=True)
     group_jid: Optional[str] = None
-    session_id: Optional[str] = None
+    session_id: Optional[str] = Field(default=None, index=True)
     extracted_name: Optional[str] = None
-    mobile: Optional[str] = None
-    email: Optional[str] = None
+    mobile: Optional[str] = Field(default=None, index=True)
+    email: Optional[str] = Field(default=None, index=True)
     company: Optional[str] = None
     confidence: float = 0.0
     source_message: Optional[str] = None
     source_type: str = "whatsapp" # whatsapp, image, etc.
     created_at: datetime = Field(default_factory=datetime.utcnow)
     lead_score: Optional[str] = None  # Hot, Warm, Cold
-    arn: Optional[str] = Field(default=None)
+    arn: Optional[str] = Field(default=None, index=True)
 
     # Excel Matched Fields
     creation_date_time: Optional[str] = Field(default=None, nullable=True)
     customer_type: Optional[str] = Field(default=None, nullable=True)
     state: Optional[str] = Field(default=None, nullable=True)
     pincode: Optional[str] = Field(default=None, nullable=True)
-    lg_code: Optional[str] = Field(default=None, nullable=True)
+    lg_code: Optional[str] = Field(default=None, index=True, nullable=True)
     ipa_status: Optional[str] = Field(default=None, nullable=True)
     dropoff_reason: Optional[str] = Field(default=None, nullable=True)
     idcom_status: Optional[str] = Field(default=None, nullable=True)
@@ -95,13 +95,13 @@ class Agent(SQLModel, table=True):
 class BulkContact(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id")
-    session_id: Optional[str] = None
+    session_id: Optional[str] = Field(default=None, index=True)
     wa_jid: str = Field(index=True)
     group_jid: Optional[str] = None
     extracted_name: Optional[str] = None
-    mobile: Optional[str] = None
-    email: Optional[str] = None
-    arn: Optional[str] = Field(default=None)
+    mobile: Optional[str] = Field(default=None, index=True)
+    email: Optional[str] = Field(default=None, index=True)
+    arn: Optional[str] = Field(default=None, index=True)
     confidence: float = 0.0
     lead_score: Optional[str] = None
     source_message: Optional[str] = None

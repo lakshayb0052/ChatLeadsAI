@@ -122,44 +122,6 @@ def get_contacts(
 ):
     from sqlmodel import text
     
-    # Dynamic heal/enrichment for unmatched agent fields
-    try:
-        agent_leads = db.exec(
-            select(Contact)
-            .where(Contact.lg_code != None)
-        ).all()
-        if agent_leads:
-            agents = db.exec(select(Agent)).all()
-            agent_map_by_user = {(a.user_id, a.lg_code.strip().upper()): a for a in agents}
-            agent_map_global = {a.lg_code.strip().upper(): a for a in agents}
-            healed = False
-            for lead in agent_leads:
-                lg_val = str(lead.lg_code).strip()
-                if lg_val and lg_val.upper() != "N/A" and lg_val != "":
-                    key = (lead.user_id, lg_val.upper())
-                    agent_info = agent_map_by_user.get(key) or agent_map_global.get(lg_val.upper())
-                    if agent_info:
-                        # Heal if unpopulated OR if details differ from latest database values
-                        if (not lead.executive_name or 
-                            lead.executive_name.strip() in ["", "N/A"] or
-                            lead.executive_name != agent_info.executive_name or
-                            lead.executive_code != agent_info.executive_code or
-                            lead.agent_city != agent_info.city or
-                            lead.agent_place != agent_info.place or
-                            lead.agent_venue != agent_info.venue):
-                            
-                            lead.executive_name = agent_info.executive_name
-                            lead.executive_code = agent_info.executive_code
-                            lead.agent_city = agent_info.city
-                            lead.agent_place = agent_info.place
-                            lead.agent_venue = agent_info.venue
-                            db.add(lead)
-                            healed = True
-            if healed:
-                db.commit()
-    except Exception as e:
-        print("Dynamic agent enrichment skipped:", e)
-        
     statement = select(Contact).order_by(Contact.created_at.desc())
     if current_user.role != "superadmin":
         statement = statement.where(Contact.user_id == current_user.id)
@@ -184,10 +146,14 @@ def get_contacts(
         statement = statement.offset(offset)
     contacts = db.exec(statement).all()
     
+    # Pre-fetch all users to avoid N+1 query problem
+    users = db.exec(select(User)).all()
+    user_map = {u.id: u for u in users}
+    
     # Enrich each contact with owner's company info
     result = []
     for c in contacts:
-        owner = db.get(User, c.user_id)
+        owner = user_map.get(c.user_id)
         item = {
             "id": c.id,
             "extracted_name": c.extracted_name,
@@ -258,10 +224,14 @@ def get_sessions(
         statement = statement.where(Contact.user_id == current_user.id)
     results = db.exec(statement).all()
     
+    # Pre-fetch all users to avoid N+1 query problem
+    users = db.exec(select(User)).all()
+    user_map = {u.id: u for u in users}
+    
     sessions_data = []
     for session_id, user_id, count in results:
         if session_id:
-            owner = db.get(User, user_id)
+            owner = user_map.get(user_id)
             sessions_data.append({
                 "session_id": session_id,
                 "status": "archived/active",
@@ -604,6 +574,38 @@ async def upload_excel(
                 if db_field in mapped_columns:
                     break
 
+    # Pre-fetch all contacts that could match to avoid N+1 query problem
+    if current_user.role == "superadmin":
+        all_contacts = db.exec(select(Contact)).all()
+    else:
+        all_contacts = db.exec(select(Contact).where(Contact.user_id == current_user.id)).all()
+    
+    # Map them by ARN
+    contact_map = {}
+    for c in all_contacts:
+        if c.arn:
+            contact_map[c.arn.strip()] = c
+            
+    # Pre-fetch all agents
+    all_agents = db.exec(select(Agent)).all()
+    # Maps for agent lookups:
+    agent_map_by_user = {}
+    agent_map_by_current_user = {}
+    agent_map_global = {}
+    
+    for agent in all_agents:
+        lg_clean = agent.lg_code.strip().upper()
+        agent_map_by_user[(agent.user_id, lg_clean)] = agent
+        if agent.user_id == current_user.id:
+            agent_map_by_current_user[lg_clean] = agent
+        agent_map_global[lg_clean] = agent
+        
+    # Pre-fetch all global ARNs to verify mismatch reason (another company vs not found)
+    if current_user.role == "superadmin":
+        global_arns = set(contact_map.keys())
+    else:
+        global_arns = {r[0].strip() for r in db.exec(select(Contact.arn)).all() if r[0]}
+
     # Perform matching and updates
     total_rows = len(df)
     matched_count = 0
@@ -619,12 +621,8 @@ async def upload_excel(
         if not arn_str or arn_str.lower() in ["nan", "none", "absent", ""]:
             continue
             
-        # Match lead
-        statement = select(Contact).where(Contact.arn == arn_str)
-        if current_user.role != "superadmin":
-            statement = statement.where(Contact.user_id == current_user.id)
-            
-        lead = db.exec(statement).first()
+        # Match lead using in-memory map
+        lead = contact_map.get(arn_str)
         
         if lead:
             # Update mapped details
@@ -648,26 +646,15 @@ async def upload_excel(
             lead.excel_updated = True
             lead.excel_updated_at = datetime.utcnow()
             
-            # Look up and populate Location & Agent details from matching lg_code
+            # Look up and populate Location & Agent details from matching lg_code in memory
             if lead.lg_code and str(lead.lg_code).strip() != "" and str(lead.lg_code).strip().upper() != "N/A":
-                lg_clean = str(lead.lg_code).strip()
-                from sqlmodel import func
-                agent_info = db.exec(
-                    select(Agent)
-                    .where(func.upper(Agent.lg_code) == lg_clean.upper())
-                    .where(Agent.user_id == lead.user_id)
-                ).first()
+                lg_clean = str(lead.lg_code).strip().upper()
+                
+                agent_info = agent_map_by_user.get((lead.user_id, lg_clean))
                 if not agent_info:
-                    agent_info = db.exec(
-                        select(Agent)
-                        .where(func.upper(Agent.lg_code) == lg_clean.upper())
-                        .where(Agent.user_id == current_user.id)
-                    ).first()
+                    agent_info = agent_map_by_current_user.get(lg_clean)
                 if not agent_info:
-                    agent_info = db.exec(
-                        select(Agent)
-                        .where(func.upper(Agent.lg_code) == lg_clean.upper())
-                    ).first()
+                    agent_info = agent_map_global.get(lg_clean)
                 
                 if agent_info:
                     lead.executive_name = agent_info.executive_name
@@ -693,9 +680,8 @@ async def upload_excel(
         else:
             if arn_str not in unmatched_seen:
                 unmatched_seen.add(arn_str)
-                # Check why it's unmatched (exist globally vs absent)
-                global_lead = db.exec(select(Contact).where(Contact.arn == arn_str)).first()
-                if global_lead:
+                # Check why it's unmatched (exist globally vs absent) using in-memory set
+                if arn_str in global_arns:
                     unmatched_arns.append({
                         "arn": arn_str,
                         "reason": "Belongs to another company"
@@ -997,28 +983,41 @@ async def approve_multiple_bulk_contacts(
     approved_count = 0
     sessions_to_notify = set()
     
+    # 1. Fetch bulk contacts to process
+    bulk_contacts = []
     for bulk_id in payload.bulk_ids:
         bc = db.get(BulkContact, bulk_id)
-        if not bc or bc.status == "added":
-            continue
-            
-        if current_user.role != "superadmin" and bc.user_id != current_user.id:
-            continue
-            
+        if bc and bc.status != "added":
+            if current_user.role == "superadmin" or bc.user_id == current_user.id:
+                bulk_contacts.append(bc)
+                
+    if not bulk_contacts:
+        return {"status": "success", "approved_count": 0}
+        
+    # 2. Extract unique sessions to notify/pre-fetch
+    session_ids = list({bc.session_id for bc in bulk_contacts if bc.session_id})
+    
+    # 3. Pre-fetch existing contacts for these sessions
+    existing_contacts = []
+    if session_ids:
+        existing_contacts = db.exec(
+            select(Contact).where(Contact.session_id.in_(session_ids))
+        ).all()
+        
+    # Build maps/sets for lookup
+    existing_by_mobile = {(c.session_id, c.mobile): c for c in existing_contacts if c.mobile}
+    existing_by_email = {(c.session_id, c.email): c for c in existing_contacts if c.email}
+    
+    # 4. Iterate and approve
+    for bc in bulk_contacts:
         sessions_to_notify.add(bc.session_id)
         
-        # Check duplicate
+        # Check duplicate in-memory
         existing_contact = None
         if bc.mobile:
-            existing_contact = db.exec(select(Contact).where(
-                Contact.session_id == bc.session_id,
-                Contact.mobile == bc.mobile
-            )).first()
+            existing_contact = existing_by_mobile.get((bc.session_id, bc.mobile))
         if not existing_contact and bc.email:
-            existing_contact = db.exec(select(Contact).where(
-                Contact.session_id == bc.session_id,
-                Contact.email == bc.email
-            )).first()
+            existing_contact = existing_by_email.get((bc.session_id, bc.email))
             
         if existing_contact:
             bc.status = "added"
@@ -1047,6 +1046,12 @@ async def approve_multiple_bulk_contacts(
         db.add(bc)
         approved_count += 1
         
+        # Add to in-memory maps to prevent duplicate within the same batch approval
+        if bc.mobile:
+            existing_by_mobile[(bc.session_id, bc.mobile)] = contact
+        if bc.email:
+            existing_by_email[(bc.session_id, bc.email)] = contact
+            
     db.commit()
     
     # Broadcast updates

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Download, User, Building2, Calendar,
   Zap, Phone, Mail, ShieldCheck, Trash2, MessageCircle, Server,
-  Wifi, ChevronRight, Briefcase, Hash, Filter, Edit, Upload,
+  Wifi, ChevronRight, ChevronLeft, Briefcase, Hash, Filter, Edit, Upload,
   Copy, Check, ChevronDown, ChevronUp, FileSpreadsheet
 } from 'lucide-react';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -71,6 +71,8 @@ interface SessionInfo {
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -286,12 +288,44 @@ export default function LeadsPage() {
     setShowDeleteAll(false); fetchLeads();
   };
 
-  useEffect(() => { fetchLeads(); }, [searchTerm, filterSession, filterScore, filterCompany, filterExcelSync]);
+  useEffect(() => {
+    setCurrentPage(1);
+    fetchLeads();
+  }, [searchTerm, filterSession, filterScore, filterCompany, filterExcelSync]);
   useEffect(() => { fetchSessions(); }, []);
   useEffect(() => { if (lastMessage?.event === 'lead_updated') fetchLeads(); }, [lastMessage]);
 
   // Derive unique companies for the company filter dropdown
   const uniqueCompanies = Array.from(new Set(leads.map(l => l.owner_company).filter(Boolean))) as string[];
+
+  // Pagination helper functions
+  const indexOfLastLead = currentPage * pageSize;
+  const indexOfFirstLead = indexOfLastLead - pageSize;
+  const currentLeads = pageSize === -1 ? leads : leads.slice(indexOfFirstLead, indexOfLastLead);
+  const totalPages = pageSize === -1 ? 1 : Math.ceil(leads.length / pageSize);
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      if (currentPage <= 3) {
+        pages.push(1, 2, 3, 4, '...', totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1, '...', totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+      } else {
+        pages.push(1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages);
+      }
+    }
+    return pages;
+  };
+
+  const handlePageSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = parseInt(e.target.value);
+    setPageSize(val);
+    setCurrentPage(1);
+  };
 
   const selectStyle = {
     background: 'var(--bg-deep)', border: '1px solid var(--border-glow)',
@@ -967,27 +1001,112 @@ export default function LeadsPage() {
           </p>
         </motion.div>
       ) : (
-        <motion.div 
-          initial="hidden"
-          animate="show"
-          variants={{
-            hidden: { opacity: 0 },
-            show: {
-              opacity: 1,
-              transition: { staggerChildren: 0.05 }
-            }
-          }}
-          className="space-y-3 md:space-y-4"
-        >
-          {leads.map((lead, i) => (
-            <LeadCard
-              key={lead.id} lead={lead} index={i}
-              isSuperAdmin={isSuperAdmin}
-              onDelete={() => setDeleteId(lead.id)}
-              onEdit={() => startEditing(lead)}
-            />
-          ))}
-        </motion.div>
+        <>
+          <motion.div 
+            initial="hidden"
+            animate="show"
+            variants={{
+              hidden: { opacity: 0 },
+              show: {
+                opacity: 1,
+                transition: { staggerChildren: 0.05 }
+              }
+            }}
+            className="space-y-3 md:space-y-4 mb-6"
+          >
+            {currentLeads.map((lead, i) => (
+              <LeadCard
+                key={lead.id} lead={lead} index={i}
+                isSuperAdmin={isSuperAdmin}
+                onDelete={() => setDeleteId(lead.id)}
+                onEdit={() => startEditing(lead)}
+              />
+            ))}
+          </motion.div>
+
+          {/* ── Pagination Controls ── */}
+          {totalPages > 1 && (
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 md:p-6 rounded-2xl md:rounded-3xl mt-4"
+                 style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-bright)', backdropFilter: 'blur(12px)' }}>
+              <div className="text-xs md:text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                {pageSize === -1 ? (
+                  <span>Showing all {leads.length} leads</span>
+                ) : (
+                  <span>
+                    Showing <strong style={{ color: 'var(--text-primary)' }}>{indexOfFirstLead + 1}</strong> to <strong style={{ color: 'var(--text-primary)' }}>{Math.min(indexOfLastLead, leads.length)}</strong> of <strong style={{ color: 'var(--text-primary)' }}>{leads.length}</strong> leads
+                  </span>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 hover:bg-[rgba(255,255,255,0.05)]"
+                  style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-bright)', color: 'var(--text-primary)' }}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                
+                <div className="flex items-center gap-1">
+                  {getPageNumbers().map((pageNum, idx) => (
+                    <React.Fragment key={idx}>
+                      {pageNum === '...' ? (
+                        <span className="px-2 text-xs md:text-sm" style={{ color: 'var(--text-secondary)' }}>...</span>
+                      ) : (
+                        <button
+                          onClick={() => setCurrentPage(pageNum as number)}
+                          className="w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center font-bold text-xs md:text-sm transition-all"
+                          style={{
+                            background: currentPage === pageNum ? 'var(--purple-mid)' : 'transparent',
+                            border: currentPage === pageNum ? '1px solid var(--purple-mid)' : '1px solid transparent',
+                            color: currentPage === pageNum ? '#ffffff' : 'var(--text-secondary)',
+                          }}
+                        >
+                          {pageNum}
+                        </button>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 hover:bg-[rgba(255,255,255,0.05)]"
+                  style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-bright)', color: 'var(--text-primary)' }}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Per page:</span>
+                <select
+                  value={pageSize}
+                  onChange={handlePageSizeChange}
+                  className="rounded-xl px-3 py-1.5 md:py-2 text-xs font-bold outline-none cursor-pointer"
+                  style={{
+                    background: 'var(--bg-deep)',
+                    border: '1px solid var(--border-glow)',
+                    color: 'var(--text-secondary)',
+                    appearance: 'none',
+                    paddingRight: '1.5rem',
+                    backgroundImage: 'url("data:image/svg+xml;utf8,<svg fill=\'%236d28d9\' height=\'24\' viewBox=\'0 0 24 24\' width=\'24\' xmlns=\'http://www.w3.org/2000/svg\'><path d=\'M7 10l5 5 5-5z\'/><path d=\'M0 0h24v24H0z\' fill=\'none\'/></svg>")',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPositionX: 'calc(100% - 0.25rem)',
+                    backgroundPositionY: '50%'
+                  }}
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={-1}>All</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </motion.div>
   );

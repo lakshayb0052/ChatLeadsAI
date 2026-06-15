@@ -86,9 +86,35 @@ def migrate_db(engine):
                             session.rollback()
                             logger.error(f"Fallback failed for column '{col_name}' in table '{table_name}': {fe}")
 
+def create_indexes(engine):
+    logger.info("Checking and creating database indexes...")
+    indexes = [
+        ('contact', 'idx_contact_session_id', 'session_id'),
+        ('contact', 'idx_contact_arn', 'arn'),
+        ('contact', 'idx_contact_mobile', 'mobile'),
+        ('contact', 'idx_contact_email', 'email'),
+        ('contact', 'idx_contact_lg_code', 'lg_code'),
+        ('bulkcontact', 'idx_bulkcontact_session_id', 'session_id'),
+        ('bulkcontact', 'idx_bulkcontact_arn', 'arn'),
+        ('bulkcontact', 'idx_bulkcontact_mobile', 'mobile'),
+        ('bulkcontact', 'idx_bulkcontact_email', 'email'),
+    ]
+    with Session(engine) as session:
+        for table, index_name, column in indexes:
+            try:
+                # CREATE INDEX IF NOT EXISTS works on both SQLite and PostgreSQL
+                query = f'CREATE INDEX IF NOT EXISTS {index_name} ON "{table}" ("{column}")'
+                session.execute(text(query))
+                session.commit()
+                logger.info(f"Verified index {index_name} on {table}({column})")
+            except Exception as e:
+                session.rollback()
+                logger.error(f"Failed to create index {index_name}: {e}")
+
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
     migrate_db(engine)
+    create_indexes(engine)
 
 def get_session():
     with Session(engine) as session:

@@ -70,6 +70,14 @@ async def process_lead_background(msg: WhatsAppMessage, image_bytes: Optional[by
             if is_excel and len(leads) > 1:
                 print(f"📊 BULK Excel Screenshot Detected! Found {len(leads)} rows.")
                 added_bulk_count = 0
+                
+                # Pre-fetch existing contacts and bulk contacts for this session to run in-memory check
+                session_contacts = db.exec(select(Contact).where(Contact.session_id == msg.session_id)).all()
+                session_bulk_contacts = db.exec(select(BulkContact).where(BulkContact.session_id == msg.session_id)).all()
+                
+                existing_mobiles = {c.mobile for c in session_contacts if c.mobile} | {bc.mobile for bc in session_bulk_contacts if bc.mobile}
+                existing_emails = {c.email for c in session_contacts if c.email} | {bc.email for bc in session_bulk_contacts if bc.email}
+                
                 for idx, lead in enumerate(leads):
                     l_name = lead.get('name', 'absent') if allow_name else 'absent'
                     l_mobile = lead.get('mobile', 'absent') if allow_mobile else 'absent'
@@ -105,31 +113,13 @@ async def process_lead_background(msg: WhatsAppMessage, image_bytes: Optional[by
                         if is_invalid or len(l_name) > 40 or len(l_name) < 2:
                             l_name = "absent"
                             
-                    # Check for exact duplicate in BulkContact or Contact
+                    # Check for exact duplicate in-memory
                     is_exact_duplicate = False
-                    if l_mobile != "absent" and l_mobile:
-                        existing_by_mobile_contact = db.exec(select(Contact).where(
-                            Contact.session_id == msg.session_id,
-                            Contact.mobile == l_mobile
-                        )).first()
-                        existing_by_mobile_bulk = db.exec(select(BulkContact).where(
-                            BulkContact.session_id == msg.session_id,
-                            BulkContact.mobile == l_mobile
-                        )).first()
-                        if existing_by_mobile_contact or existing_by_mobile_bulk:
-                            is_exact_duplicate = True
+                    if l_mobile != "absent" and l_mobile and l_mobile in existing_mobiles:
+                        is_exact_duplicate = True
                             
-                    if not is_exact_duplicate and l_email != "absent" and l_email:
-                        existing_by_email_contact = db.exec(select(Contact).where(
-                            Contact.session_id == msg.session_id,
-                            Contact.email == l_email
-                        )).first()
-                        existing_by_email_bulk = db.exec(select(BulkContact).where(
-                            BulkContact.session_id == msg.session_id,
-                            BulkContact.email == l_email
-                        )).first()
-                        if existing_by_email_contact or existing_by_email_bulk:
-                            is_exact_duplicate = True
+                    if not is_exact_duplicate and l_email != "absent" and l_email and l_email in existing_emails:
+                        is_exact_duplicate = True
                             
                     if is_exact_duplicate:
                         print(f"   [Row {idx+1}] Skipping - Contact already exists in Bulk or standard Leads.")
@@ -153,6 +143,12 @@ async def process_lead_background(msg: WhatsAppMessage, image_bytes: Optional[by
                     bulk_contact = BulkContact(**bulk_data)
                     db.add(bulk_contact)
                     added_bulk_count += 1
+                    
+                    # Add to in-memory set to prevent duplicates in the same batch
+                    if l_mobile != "absent" and l_mobile:
+                        existing_mobiles.add(l_mobile)
+                    if l_email != "absent" and l_email:
+                        existing_emails.add(l_email)
                 
                 db.commit()
                 print(f"✅ Saved {added_bulk_count} new bulk leads in pending status.")
