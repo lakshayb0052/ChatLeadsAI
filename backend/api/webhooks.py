@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlmodel import Session, select
 from database import get_session, engine
 from models import Contact, WhatsAppSession, BulkContact, User
-from services.extractor import extractor
+from services.extractor import extractor, auto_correct_arn_ocr
 from pydantic import BaseModel
 from typing import Optional, List
 import re
@@ -16,6 +16,89 @@ def normalize_mobile(mobile: str) -> str:
         return ""
     digits = "".join(c for c in str(mobile) if c.isdigit())
     return digits[-10:] if len(digits) >= 10 else digits
+
+
+def canonicalize_arn_ocr(s: str) -> str:
+    if not s:
+        return ""
+    s_cleaned = "".join(c for c in str(s) if c.isalnum()).lower()
+    # replacements for OCR confusion
+    replacements = {
+        'o': '0',
+        'i': '1',
+        'l': '1',
+        's': '5',
+        'z': '2',
+        'b': '8',
+        'g': '9',
+        'q': '9'
+    }
+    for src, dst in replacements.items():
+        s_cleaned = s_cleaned.replace(src, dst)
+    return s_cleaned
+
+
+def levenshtein_distance(s1: str, s2: str) -> int:
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+        
+    return previous_row[-1]
+
+
+def match_and_correct_arn(extracted_arn: str, db_arns: List[str]) -> str:
+    if not extracted_arn or extracted_arn == 'absent':
+        return extracted_arn
+        
+    canon_extracted = canonicalize_arn_ocr(extracted_arn)
+    if not canon_extracted:
+        return extracted_arn
+        
+    # 1. Check for canonical exact match among database ARNs
+    for db_arn in db_arns:
+        if not db_arn:
+            continue
+        if canonicalize_arn_ocr(db_arn) == canon_extracted:
+            print(f"🎯 ARN Corrected & Matched (Exact/OCR): '{extracted_arn}' -> '{db_arn}'")
+            return db_arn
+            
+    # 2. Check for fuzzy match using Levenshtein distance
+    best_match = None
+    min_distance = 999
+    
+    for db_arn in db_arns:
+        if not db_arn:
+            continue
+        canon_db = canonicalize_arn_ocr(db_arn)
+        if not canon_db:
+            continue
+        
+        # Only allow fuzzy matching if lengths are similar (difference <= 2)
+        if abs(len(canon_extracted) - len(canon_db)) <= 2:
+            dist = levenshtein_distance(canon_extracted, canon_db)
+            if dist < min_distance:
+                min_distance = dist
+                best_match = db_arn
+                
+    # If we found a very close match (distance <= 2 for longer strings, or distance <= 1 for shorter strings)
+    if best_match:
+        limit = 2 if len(canon_extracted) >= 6 else 1
+        if min_distance <= limit:
+            print(f"🎯 ARN Corrected & Matched (Fuzzy, dist={min_distance}): '{extracted_arn}' -> '{best_match}'")
+            return best_match
+            
+    return extracted_arn
 
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -70,6 +153,11 @@ async def process_lead_background(msg: WhatsAppMessage, image_bytes: Optional[by
             allow_email = owner_user.allow_email if owner_user else True
             allow_arn = owner_user.allow_arn if owner_user else True
 
+            # Fetch all existing ARNs for this user to match and correct OCR errors
+            existing_arns_contacts = db.exec(select(Contact.arn).where(Contact.user_id == session.user_id)).all()
+            existing_arns_bulk = db.exec(select(BulkContact.arn).where(BulkContact.user_id == session.user_id)).all()
+            all_db_arns = [arn for arn in (existing_arns_contacts + existing_arns_bulk) if arn and arn != 'absent']
+
             # Check if we have multiple leads in the message/image (bulk leads)
             leads = extracted.get('leads', [])
             
@@ -86,6 +174,10 @@ async def process_lead_background(msg: WhatsAppMessage, image_bytes: Optional[by
                     l_mobile = lead.get('mobile', 'absent') if allow_mobile else 'absent'
                     l_email = lead.get('email', 'absent') if allow_email else 'absent'
                     l_arn = lead.get('arn', 'absent') if allow_arn else 'absent'
+                    
+                    if l_arn != 'absent' and l_arn:
+                        l_arn = auto_correct_arn_ocr(l_arn)
+                        l_arn = match_and_correct_arn(l_arn, all_db_arns)
                     
                     # Validate and sanitize
                     has_contact_info = False
@@ -196,6 +288,10 @@ async def process_lead_background(msg: WhatsAppMessage, image_bytes: Optional[by
             mobile = extracted.get('mobile', 'absent') if allow_mobile else 'absent'
             email = extracted.get('email', 'absent') if allow_email else 'absent'
             arn = extracted.get('arn', 'absent') if allow_arn else 'absent'
+            
+            if arn != 'absent' and arn:
+                arn = auto_correct_arn_ocr(arn)
+                arn = match_and_correct_arn(arn, all_db_arns)
             
             print(f"📊 Extracted from THIS message - Name: {name}, Mobile: {mobile}, Email: {email}, ARN: {arn}")
             

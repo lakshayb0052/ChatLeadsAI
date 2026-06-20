@@ -26,6 +26,28 @@ load_dotenv()
 
 # Configuration removed since we use Gemini Vision directly
 
+def auto_correct_arn_ocr(arn_str: str) -> str:
+    if not arn_str or str(arn_str).lower() in ["nan", "none", "absent", ""]:
+        return "absent"
+        
+    cleaned = re.sub(r'[\s\-:#]', '', str(arn_str))
+    if not cleaned:
+        return "absent"
+        
+    # Perform standard OCR confusable corrections (O -> 0, I/L -> 1)
+    # which are safe and universally applicable to reference numbers.
+    corrected = []
+    for c in cleaned:
+        c_upper = c.upper()
+        if c_upper in ['O']:
+            corrected.append('0')
+        elif c_upper in ['I', 'L']:
+            corrected.append('1')
+        else:
+            corrected.append(c)
+            
+    return "".join(corrected)
+
 def get_system_prompt(text_content: str, context: Optional[str] = None) -> str:
     context_str = f"\nRECENT CONTEXT (Previous messages from this contact):\n{context}" if context else ""
     return f"""
@@ -261,9 +283,9 @@ class ExtractorService:
                     
                     # Sanitize ARN
                     if l_arn != 'absent' and l_arn:
-                        clean_arn = re.sub(r'[\s\-:#]', '', str(l_arn))
-                        if clean_arn.isalnum() and len(clean_arn) >= 8:
-                            l_arn = clean_arn
+                        corrected_arn = auto_correct_arn_ocr(l_arn)
+                        if corrected_arn != 'absent' and len(corrected_arn) >= 4:
+                            l_arn = corrected_arn
                         else:
                             l_arn = 'absent'
                     else:
@@ -357,8 +379,8 @@ class ExtractorService:
                 r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)$'
             ],
             'arn': [
-                r'(?:arn|arn\s+no|reference\s+number|application\s+reference|ref\s+no)[\s.:#\-]*(\d{10,20})',
-                r'\b\d{12,20}\b'
+                r'(?:arn|arn\s+no|reference\s+number|application\s+reference|ref\s+no)[\s.:#\-]*([a-zA-Z0-9]{4,20})',
+                r'\b[a-zA-Z0-9]{10,20}\b'
             ]
         }
         
@@ -402,9 +424,9 @@ class ExtractorService:
             matches = re.findall(pattern, clean_text, re.IGNORECASE)
             if matches:
                 m = matches[0]
-                digits = re.sub(r'\D', '', m)
-                if len(digits) >= 8:
-                    arn = digits
+                corrected = auto_correct_arn_ocr(m)
+                if corrected != "absent" and len(corrected) >= 4:
+                    arn = corrected
                     break
 
         # NEW RULE: If neither mobile nor email are present, immediately reject as not a valid lead!
