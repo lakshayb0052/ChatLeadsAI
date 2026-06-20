@@ -11,6 +11,13 @@ import asyncio
 from datetime import datetime
 import base64
 
+def normalize_mobile(mobile: str) -> str:
+    if not mobile:
+        return ""
+    digits = "".join(c for c in str(mobile) if c.isdigit())
+    return digits[-10:] if len(digits) >= 10 else digits
+
+
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 class WhatsAppMessage(BaseModel):
@@ -74,9 +81,6 @@ async def process_lead_background(msg: WhatsAppMessage, image_bytes: Optional[by
                 session_contacts = db.exec(select(Contact).where(Contact.session_id == msg.session_id)).all()
                 session_bulk_contacts = db.exec(select(BulkContact).where(BulkContact.session_id == msg.session_id)).all()
                 
-                existing_mobiles = {c.mobile for c in session_contacts if c.mobile} | {bc.mobile for bc in session_bulk_contacts if bc.mobile}
-                existing_emails = {c.email for c in session_contacts if c.email} | {bc.email for bc in session_bulk_contacts if bc.email}
-                
                 for idx, lead in enumerate(leads):
                     l_name = lead.get('name', 'absent') if allow_name else 'absent'
                     l_mobile = lead.get('mobile', 'absent') if allow_mobile else 'absent'
@@ -112,45 +116,66 @@ async def process_lead_background(msg: WhatsAppMessage, image_bytes: Optional[by
                         if is_invalid or len(l_name) > 40 or len(l_name) < 2:
                             l_name = "absent"
                             
-                    # Check for exact duplicate in-memory
-                    is_exact_duplicate = False
-                    if l_mobile != "absent" and l_mobile and l_mobile in existing_mobiles:
-                        is_exact_duplicate = True
+                    # Check for existing contact/bulk entry using normalized mobile or email
+                    l_mobile_norm = normalize_mobile(l_mobile) if l_mobile != "absent" else ""
+                    
+                    existing_contact = None
+                    existing_bulk = None
+                    
+                    if l_mobile_norm:
+                        existing_contact = next((c for c in session_contacts if normalize_mobile(c.mobile) == l_mobile_norm), None)
+                        if not existing_contact:
+                            existing_bulk = next((bc for bc in session_bulk_contacts if normalize_mobile(bc.mobile) == l_mobile_norm), None)
                             
-                    if not is_exact_duplicate and l_email != "absent" and l_email and l_email in existing_emails:
-                        is_exact_duplicate = True
+                    if not existing_contact and not existing_bulk and l_email != "absent" and l_email:
+                        existing_contact = next((c for c in session_contacts if c.email == l_email), None)
+                        if not existing_contact:
+                            existing_bulk = next((bc for bc in session_bulk_contacts if bc.email == l_email), None)
                             
-                    if is_exact_duplicate:
-                        print(f"   [Row {idx+1}] Skipping - Contact already exists in Bulk or standard Leads.")
-                        continue
+                    if existing_contact:
+                        print(f"   [Row {idx+1}] Updating existing standard Contact ID {existing_contact.id}")
+                        if l_name != "absent" and l_name:
+                            existing_contact.extracted_name = l_name
+                        if l_email != "absent" and l_email:
+                            existing_contact.email = l_email
+                        if l_arn != "absent" and l_arn:
+                            existing_contact.arn = l_arn
+                        db.add(existing_contact)
+                    elif existing_bulk:
+                        print(f"   [Row {idx+1}] Updating existing bulk Contact ID {existing_bulk.id}")
+                        if l_name != "absent" and l_name:
+                            existing_bulk.extracted_name = l_name
+                        if l_email != "absent" and l_email:
+                            existing_bulk.email = l_email
+                        if l_arn != "absent" and l_arn:
+                            existing_bulk.arn = l_arn
+                        existing_bulk.status = "pending"
+                        db.add(existing_bulk)
+                    else:
+                        # Save new bulk contact
+                        bulk_data = {
+                            "user_id": session.user_id,
+                            "session_id": msg.session_id,
+                            "wa_jid": msg.sender_jid,
+                            "group_jid": msg.group_jid,
+                            "extracted_name": l_name if l_name != "absent" else None,
+                            "mobile": l_mobile if l_mobile != "absent" else None,
+                            "email": l_email if l_email != "absent" else None,
+                            "arn": l_arn if l_arn != "absent" else None,
+                            "confidence": extracted.get('confidence', 0.5),
+                            "lead_score": extracted.get('lead_score', 'Cold'),
+                            "source_message": msg.text[:500] if msg.text and msg.text not in ["[image]", "[media]"] else "[bulk image screenshot]"
+                        }
+                        bulk_contact = BulkContact(**bulk_data)
+                        db.add(bulk_contact)
+                        added_bulk_count += 1
                         
-                    # Save bulk contact
-                    bulk_data = {
-                        "user_id": session.user_id,
-                        "session_id": msg.session_id,
-                        "wa_jid": msg.sender_jid,
-                        "group_jid": msg.group_jid,
-                        "extracted_name": l_name if l_name != "absent" else None,
-                        "mobile": l_mobile if l_mobile != "absent" else None,
-                        "email": l_email if l_email != "absent" else None,
-                        "arn": l_arn if l_arn != "absent" else None,
-                        "confidence": extracted.get('confidence', 0.5),
-                        "lead_score": extracted.get('lead_score', 'Cold'),
-                        "source_message": msg.text[:500] if msg.text and msg.text not in ["[image]", "[media]"] else "[bulk image screenshot]"
-                    }
-                    
-                    bulk_contact = BulkContact(**bulk_data)
-                    db.add(bulk_contact)
-                    added_bulk_count += 1
-                    
-                    # Add to in-memory set to prevent duplicates in the same batch
-                    if l_mobile != "absent" and l_mobile:
-                        existing_mobiles.add(l_mobile)
-                    if l_email != "absent" and l_email:
-                        existing_emails.add(l_email)
+                        # Add new mobile/email to session lists in-memory so subsequent entries don't duplicate
+                        if l_mobile != "absent" and l_mobile:
+                            session_bulk_contacts.append(bulk_contact)
                 
                 db.commit()
-                print(f"✅ Saved {added_bulk_count} new bulk leads in pending status.")
+                print(f"✅ Processed bulk extraction. Added {added_bulk_count} new bulk leads.")
                 
                 # Broadcast WebSocket update
                 try:
@@ -212,26 +237,20 @@ async def process_lead_background(msg: WhatsAppMessage, image_bytes: Optional[by
                     name = "absent"
 
             
-            # 5. CRITICAL FIX: Check for EXACT duplicate based on mobile OR email
-            # Create NEW lead even if same sender, unless mobile/email exactly matches an existing lead
+            # 5. CRITICAL FIX: Check for EXACT duplicate based on mobile OR email using normalized mobile
             is_exact_duplicate = False
+            mobile_norm = normalize_mobile(mobile) if mobile != "absent" else ""
             
-            if mobile != "absent" and mobile:
-                # Check if this exact mobile already exists in this session
-                existing_by_mobile = db.exec(select(Contact).where(
-                    Contact.session_id == msg.session_id,
-                    Contact.mobile == mobile
-                )).first()
+            session_contacts_all = db.exec(select(Contact).where(Contact.session_id == msg.session_id)).all()
+            
+            if mobile_norm:
+                existing_by_mobile = next((c for c in session_contacts_all if normalize_mobile(c.mobile) == mobile_norm), None)
                 if existing_by_mobile:
                     is_exact_duplicate = True
                     print(f"⚠️ EXACT DUPLICATE: Mobile {mobile} already exists in this session (Contact: {existing_by_mobile.extracted_name})")
             
             if not is_exact_duplicate and email != "absent" and email:
-                # Check if this exact email already exists in this session
-                existing_by_email = db.exec(select(Contact).where(
-                    Contact.session_id == msg.session_id,
-                    Contact.email == email
-                )).first()
+                existing_by_email = next((c for c in session_contacts_all if c.email == email), None)
                 if existing_by_email:
                     is_exact_duplicate = True
                     print(f"⚠️ EXACT DUPLICATE: Email {email} already exists in this session (Contact: {existing_by_email.extracted_name})")
