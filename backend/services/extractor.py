@@ -33,27 +33,27 @@ def get_system_prompt(text_content: str, context: Optional[str] = None) -> str:
         
         CRITICAL PIPELINE INSTRUCTIONS:
         1. FIRST, analyze the input (both the Text caption/message AND/OR the attached Image simultaneously).
-           Specifically, check if the attached image is a screenshot of an Excel sheet, Google Sheet, or other tabular spreadsheet containing MULTIPLE rows/entries of contact information (such as name, contact/mobile, email, and Application Reference Number/ARN).
+           Specifically, check if the input contains MULTIPLE contact details (such as names, contact/mobile numbers, email addresses, and Application Reference Numbers/ARNs/UTRs/references).
         
-        2. Spreadsheet Detection:
-           - If the image is a screenshot of a spreadsheet or Excel table with MORE than one data row/entry, set "is_excel_screenshot" to true.
-           - Extract ALL the data rows present in the screenshot into a JSON list of objects under the "leads" key.
-           - For each row, extract the name, mobile/contact, email, and ARN if present.
+        2. Multiple Leads Detection (Spreadsheets, Lists, Images of Multiple Entries, etc.):
+           - If the input contains MORE than one lead entry (regardless of whether it is a spreadsheet table, a Google Sheet, a chat transcript screenshot, a list of contacts, or handwritten notes), extract ALL the leads present into a JSON list of objects under the "leads" key.
+           - Set "is_excel_screenshot" to true if it is a spreadsheet screenshot, or false if it is not a spreadsheet, but ALWAYS extract ALL leads found.
+           - For each lead, extract the name, mobile/contact, email, and ARN/UTR if present.
         
-        3. Single Lead / Non-Spreadsheet Detection:
-           - If the image is NOT a spreadsheet screenshot (e.g. it is a business card, a single bank receipt, an invoice, a text message, or there is only a single lead), set "is_excel_screenshot" to false.
-           - In this case, extract the single lead details (name, mobile/contact, email, and ARN) and place it as a single object inside the "leads" list.
+        3. Single Lead Detection:
+           - If the input contains only a single lead, set "is_excel_screenshot" to false.
+           - Extract the single lead details (name, mobile/contact, email, and ARN) and place it as a single object inside the "leads" list.
            
         4. Valid Lead Criteria:
            - A valid lead MUST contain contact details (either mobile/phone number or email).
            - A mobile/contact is a phone number (e.g., 10-digit mobile number, with or without spaces/dashes/formatting, or with a country/area prefix like +91 82958 86832, 82958 86832, 011 4464 2345).
            - An email is an email address (e.g., matching standard email pattern, gmail, company email).
-           - If a lead (or a row in the spreadsheet) does NOT have at least a mobile number or an email, it is NOT a valid lead and you should set its name, mobile, email, and arn to "absent".
+           - If a lead (or a row in the input) does NOT have at least a mobile number or an email, it is NOT a valid lead and you should set its name, mobile, email, and arn to "absent".
            
         RULES FOR ARN EXTRACTION:
-        - Look for an Application Reference Number, Transaction Reference, Submission Reference, or similar sequence (referred to as "ARN" or "ARN number").
-        - The ARN is typically a long digit sequence (e.g., 12 to 20 digits, such as 987654321123456 or 98654321234567890).
-        - If found, extract the numeric/alphanumeric ARN. If not found, return "absent".
+        - Look for an Application Reference Number, UTR Number, Transaction Reference, Submission Reference, or similar sequence (referred to as "ARN" or "UTR").
+        - The ARN/UTR is typically a long digit sequence (e.g., 12 to 20 digits, such as 987654321123456 or 98654321234567890).
+        - If found, extract the numeric/alphanumeric ARN/UTR. If not found, return "absent".
         
         RULES FOR NAME EXTRACTION:
         - The name MUST be a real person's name or a business owner's name.
@@ -61,7 +61,7 @@ def get_system_prompt(text_content: str, context: Optional[str] = None) -> str:
           * Generic titles/greetings: "Dear Students", "Dear All", "Dear Parents", "Dear Candidate", "Hello Team"
           * Process/Heading labels: "Reporting Details", "Announcement", "Notice", "Agenda", "Schedule", "Special PEP", "Coding Test"
           * Roles: "Admin", "Coordinator", "Teacher", "System", "Host", "Moderator"
-          * Action/Status words: "Sleeping", "Busy", "Working", "Available"
+          * Action/Status words: "Sleeping", "Busy", "Working", "Driving", "Available"
         - If no real, relevant person's name is present, but a contact/email is present, extract the contact/email but return "absent" for the name.
         
         {context_str}
@@ -75,7 +75,7 @@ def get_system_prompt(text_content: str, context: Optional[str] = None) -> str:
            - name: The extracted name of the real person or "absent".
            - mobile: The extracted phone number or "absent".
            - email: The extracted email or "absent".
-           - arn: The extracted Application Reference Number (ARN) or "absent".
+           - arn: The extracted Application Reference Number (ARN) / UTR or "absent".
         3. lead_score: "Hot/Warm/Cold" (overall score for the interaction).
         4. confidence: 0.0 to 1.0 (overall confidence of extraction).
         

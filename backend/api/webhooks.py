@@ -63,12 +63,11 @@ async def process_lead_background(msg: WhatsAppMessage, image_bytes: Optional[by
             allow_email = owner_user.allow_email if owner_user else True
             allow_arn = owner_user.allow_arn if owner_user else True
 
-            # Check if this is a bulk excel screenshot
-            is_excel = bool(extracted.get('is_excel_screenshot', False)) and allow_bulk
+            # Check if we have multiple leads in the message/image (bulk leads)
             leads = extracted.get('leads', [])
             
-            if is_excel and len(leads) > 1:
-                print(f"📊 BULK Excel Screenshot Detected! Found {len(leads)} rows.")
+            if len(leads) > 1:
+                print(f"📊 BULK Leads Detected! Found {len(leads)} rows.")
                 added_bulk_count = 0
                 
                 # Pre-fetch existing contacts and bulk contacts for this session to run in-memory check
