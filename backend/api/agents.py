@@ -111,12 +111,8 @@ def get_agents(
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    # Standard admins see only their own agents. Superadmins see all.
-    if current_user.role == "superadmin":
-        statement = select(Agent).order_by(Agent.lg_code)
-    else:
-        statement = select(Agent).where(Agent.user_id == current_user.id).order_by(Agent.lg_code)
-        
+    # Retrieve all agents for all users to ensure they are globally visible.
+    statement = select(Agent).order_by(Agent.lg_code)
     return db.exec(statement).all()
 
 @router.delete("/{agent_id}")

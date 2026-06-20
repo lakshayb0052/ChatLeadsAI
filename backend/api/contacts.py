@@ -533,8 +533,11 @@ async def upload_excel(
     headers = list(df.columns)
     cleaned_headers_map = {clean_header(h): h for h in headers}
     
-    # Find the ARN column
-    arn_col_candidates = ["arn", "arnno", "arnnumber", "applicationreferencenumber", "refno", "referenceno"]
+    # Find the ARN or UTR column
+    arn_col_candidates = [
+        "arn", "arnno", "arnnumber", "applicationreferencenumber", "refno", "referenceno",
+        "utr", "utrno", "utrnumber", "transactionreference", "transactionid", "upi", "upireference", "reference"
+    ]
     arn_column_original = None
     for candidate in arn_col_candidates:
         if candidate in cleaned_headers_map:
@@ -542,16 +545,16 @@ async def upload_excel(
             break
             
     if not arn_column_original:
-        # Fallback: check if any cleaned header contains "arn"
+        # Fallback: check if any cleaned header contains "arn" or "utr"
         for ch, oh in cleaned_headers_map.items():
-            if "arn" in ch:
+            if "arn" in ch or "utr" in ch or "transactionid" in ch:
                 arn_column_original = oh
                 break
                 
     if not arn_column_original:
         raise HTTPException(
             status_code=400,
-            detail="Could not find an 'ARN' or 'Application Reference Number' column in the spreadsheet. "
+            detail="Could not find an 'ARN' or 'UTR' column in the spreadsheet. "
                    f"Found columns: {', '.join(headers)}"
         )
         
@@ -604,7 +607,7 @@ async def upload_excel(
     if current_user.role == "superadmin":
         global_arns = set(contact_map.keys())
     else:
-        global_arns = {r[0].strip() for r in db.exec(select(Contact.arn)).all() if r[0]}
+        global_arns = {r.strip() for r in db.exec(select(Contact.arn)).all() if r}
 
     # Perform matching and updates
     total_rows = len(df)
@@ -624,73 +627,104 @@ async def upload_excel(
         # Match lead using in-memory map
         lead = contact_map.get(arn_str)
         
-        if lead:
-            # Update mapped details
-            for db_field, excel_col in mapped_columns.items():
-                val = row[excel_col]
-                # Clean value
-                if pd.isna(val):
+        if not lead:
+            # Create a new contact if not found in the database
+            mobile_str = None
+            name_str = "Imported Lead"
+            email_str = None
+            
+            for col in headers:
+                col_clean = clean_header(col)
+                if col_clean in ["mobile", "mobilenumber", "phone", "phonenumber", "contact", "contactnumber", "phoneno", "mobileno", "mob"]:
+                    m_val = row[col]
+                    if not pd.isna(m_val):
+                        digits = "".join(filter(str.isdigit, str(m_val)))
+                        if digits:
+                            if len(digits) == 10:
+                                mobile_str = "91" + digits
+                            else:
+                                mobile_str = digits
+                elif col_clean in ["name", "customername", "clientname", "leadname", "fullname", "nameofthecustomer", "custname"]:
+                    n_val = row[col]
+                    if not pd.isna(n_val) and str(n_val).strip():
+                        name_str = str(n_val).strip()
+                elif col_clean in ["email", "emailaddress", "mail", "mailid"]:
+                    e_val = row[col]
+                    if not pd.isna(e_val) and str(e_val).strip():
+                        email_str = str(e_val).strip()
+            
+            # Construct wa_jid
+            if mobile_str:
+                wa_jid = f"{mobile_str}@s.whatsapp.net"
+            else:
+                wa_jid = f"excel_{arn_str}@s.whatsapp.net"
+                
+            lead = Contact(
+                user_id=current_user.id,
+                wa_jid=wa_jid,
+                extracted_name=name_str,
+                mobile=mobile_str,
+                email=email_str,
+                arn=arn_str,
+                source_type="excel",
+                confidence=1.0,
+                lead_score="Warm"
+            )
+            db.add(lead)
+            contact_map[arn_str] = lead
+            
+        # Update mapped details
+        for db_field, excel_col in mapped_columns.items():
+            val = row[excel_col]
+            # Clean value
+            if pd.isna(val):
+                setattr(lead, db_field, None)
+            else:
+                if isinstance(val, pd.Timestamp):
+                    val_str = val.strftime("%Y-%m-%d %H:%M:%S")
+                else:
+                    val_str = str(val).strip()
+                
+                if val_str.lower() in ["nan", "none", "null"]:
                     setattr(lead, db_field, None)
                 else:
-                    if isinstance(val, pd.Timestamp):
-                        val_str = val.strftime("%Y-%m-%d %H:%M:%S")
-                    else:
-                        val_str = str(val).strip()
-                    
-                    if val_str.lower() in ["nan", "none", "null"]:
-                        setattr(lead, db_field, None)
-                    else:
-                        setattr(lead, db_field, val_str)
+                    setattr(lead, db_field, val_str)
+        
+        # Set update tracker
+        lead.excel_updated = True
+        lead.excel_updated_at = datetime.utcnow()
+        
+        # Look up and populate Location & Agent details from matching lg_code in memory
+        if lead.lg_code and str(lead.lg_code).strip() != "" and str(lead.lg_code).strip().upper() != "N/A":
+            lg_clean = str(lead.lg_code).strip().upper()
             
-            # Set update tracker
-            lead.excel_updated = True
-            lead.excel_updated_at = datetime.utcnow()
+            agent_info = agent_map_by_user.get((lead.user_id, lg_clean))
+            if not agent_info:
+                agent_info = agent_map_by_current_user.get(lg_clean)
+            if not agent_info:
+                agent_info = agent_map_global.get(lg_clean)
             
-            # Look up and populate Location & Agent details from matching lg_code in memory
-            if lead.lg_code and str(lead.lg_code).strip() != "" and str(lead.lg_code).strip().upper() != "N/A":
-                lg_clean = str(lead.lg_code).strip().upper()
-                
-                agent_info = agent_map_by_user.get((lead.user_id, lg_clean))
-                if not agent_info:
-                    agent_info = agent_map_by_current_user.get(lg_clean)
-                if not agent_info:
-                    agent_info = agent_map_global.get(lg_clean)
-                
-                if agent_info:
-                    lead.executive_name = agent_info.executive_name
-                    lead.executive_code = agent_info.executive_code
-                    lead.agent_city = agent_info.city
-                    lead.agent_place = agent_info.place
-                    lead.agent_venue = agent_info.venue
-                else:
-                    lead.executive_name = "N/A"
-                    lead.executive_code = "N/A"
-                    lead.agent_city = "N/A"
-                    lead.agent_place = "N/A"
-                    lead.agent_venue = "N/A"
+            if agent_info:
+                lead.executive_name = agent_info.executive_name
+                lead.executive_code = agent_info.executive_code
+                lead.agent_city = agent_info.city
+                lead.agent_place = agent_info.place
+                lead.agent_venue = agent_info.venue
             else:
                 lead.executive_name = "N/A"
                 lead.executive_code = "N/A"
                 lead.agent_city = "N/A"
                 lead.agent_place = "N/A"
                 lead.agent_venue = "N/A"
-            
-            db.add(lead)
-            matched_count += 1
         else:
-            if arn_str not in unmatched_seen:
-                unmatched_seen.add(arn_str)
-                # Check why it's unmatched (exist globally vs absent) using in-memory set
-                if arn_str in global_arns:
-                    unmatched_arns.append({
-                        "arn": arn_str,
-                        "reason": "Belongs to another company"
-                    })
-                else:
-                    unmatched_arns.append({
-                        "arn": arn_str,
-                        "reason": "Not found in database"
-                    })
+            lead.executive_name = "N/A"
+            lead.executive_code = "N/A"
+            lead.agent_city = "N/A"
+            lead.agent_place = "N/A"
+            lead.agent_venue = "N/A"
+        
+        db.add(lead)
+        matched_count += 1
             
     db.commit()
     
