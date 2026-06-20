@@ -41,6 +41,15 @@ def clean_header(header: str) -> str:
     return str(header).strip().lower().replace("_", "").replace(" ", "").replace(".", "").replace("/", "")
 
 
+def sanitize_arn(val) -> str:
+    if val is None or pd.isna(val):
+        return ""
+    val_str = str(val).strip()
+    if val_str.endswith(".0"):
+        val_str = val_str[:-2]
+    return "".join(c for c in val_str if c.isalnum())
+
+
 class ContactUpdate(BaseModel):
     extracted_name: Optional[str] = None
     mobile: Optional[str] = None
@@ -583,11 +592,13 @@ async def upload_excel(
     else:
         all_contacts = db.exec(select(Contact).where(Contact.user_id == current_user.id)).all()
     
-    # Map them by ARN
+    # Map them by sanitized ARN
     contact_map = {}
     for c in all_contacts:
         if c.arn:
-            contact_map[c.arn.strip()] = c
+            s_arn = sanitize_arn(c.arn)
+            if s_arn:
+                contact_map[s_arn] = c
             
     # Pre-fetch all agents
     all_agents = db.exec(select(Agent)).all()
@@ -607,7 +618,7 @@ async def upload_excel(
     if current_user.role == "superadmin":
         global_arns = set(contact_map.keys())
     else:
-        global_arns = {r.strip() for r in db.exec(select(Contact.arn)).all() if r}
+        global_arns = {sanitize_arn(r) for r in db.exec(select(Contact.arn)).all() if r}
 
     # Perform matching and updates
     total_rows = len(df)
@@ -620,7 +631,7 @@ async def upload_excel(
         if pd.isna(arn_val):
             continue
             
-        arn_str = str(arn_val).strip()
+        arn_str = sanitize_arn(arn_val)
         if not arn_str or arn_str.lower() in ["nan", "none", "absent", ""]:
             continue
             
